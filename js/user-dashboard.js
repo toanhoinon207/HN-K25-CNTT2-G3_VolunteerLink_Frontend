@@ -585,30 +585,343 @@ function submitHourClaim() {
   renderCertificatesAndClaims();
 }
 
-// ================= TAB 5: PROFILE =================
+
+ // ================= TAB 5: PROFILE =================
+
+function profileError(error, fallback = "Có lỗi xảy ra!") {
+  const detail = error.response?.data?.detail;
+
+  if (typeof detail === "string") return detail;
+
+  if (Array.isArray(detail)) {
+    return detail.map(item => item.msg).join(", ");
+  }
+
+  if (error.code === "ECONNABORTED") {
+    return "Máy chủ phản hồi quá chậm. Vui lòng thử lại.";
+  }
+
+  return fallback;
+}
+
+
+// Khởi tạo form hồ sơ
 function setupProfileForm() {
-  if (document.getElementById("profFullName")) {
-    document.getElementById("profFullName").value = currentUser.full_name || currentUser.name || "";
-    document.getElementById("profEmail").value = currentUser.email || "";
-    document.getElementById("profPhone").value = currentUser.phone || "";
+  loadUserProfile();
+
+  const passwordForm = document.getElementById(
+    "changePasswordForm"
+  );
+
+  if (passwordForm) {
+    passwordForm.addEventListener(
+      "submit",
+      changeUserPassword
+    );
   }
 }
 
-function saveUserProfile() {
-  const newName = document.getElementById("profFullName").value.trim();
-  const newPhone = document.getElementById("profPhone").value.trim();
 
-  if (!newName) {
+// 1. Lấy hồ sơ từ Backend
+async function loadUserProfile() {
+  try {
+    const response = await api.get("/profile/me");
+    const profile = response.data;
+
+    const setValue = (id, value) => {
+      const element = document.getElementById(id);
+
+      if (element) {
+        element.value = value ?? "";
+      }
+    };
+
+    setValue("profFullName", profile.full_name);
+    setValue("profEmail", profile.email);
+    setValue("profPhone", profile.phone);
+    setValue("profAvatarUrl", profile.avatar_url);
+    setValue("profSkills", profile.skills);
+    setValue("profArea", profile.area);
+    setValue("profDateOfBirth", profile.date_of_birth);
+
+    const hoursElement = document.getElementById(
+      "profileTotalHours"
+    );
+
+    if (hoursElement) {
+      hoursElement.textContent =
+        `${profile.total_hours ?? 0} giờ`;
+    }
+
+    const publicLink = document.getElementById(
+      "publicProfileLink"
+    );
+
+    if (publicLink) {
+      publicLink.href =
+        `public-profile.html?id=${encodeURIComponent(profile.id)}`;
+    }
+
+    const nameDisplay = document.getElementById(
+      "profNameDisplay"
+    );
+
+    if (nameDisplay) {
+      nameDisplay.textContent = profile.full_name;
+    }
+
+    // Đồng bộ thông tin tài khoản đang đăng nhập
+    currentUser = {
+      ...currentUser,
+      full_name: profile.full_name,
+      phone: profile.phone,
+      avatar_url: profile.avatar_url
+    };
+
+    localStorage.setItem(
+      "auth_user",
+      JSON.stringify(currentUser)
+    );
+
+    setupUserHeader();
+    updateProfileAvatar(profile.avatar_url);
+
+  } catch (error) {
+    console.error("Lỗi tải hồ sơ:", error);
+
+    showToast(
+      profileError(error, "Không thể tải hồ sơ!"),
+      "error"
+    );
+  }
+}
+
+
+// Hiển thị avatar
+function updateProfileAvatar(avatarUrl) {
+  const avatar = document.getElementById(
+    "profileAvatarBig"
+  );
+
+  if (!avatar) return;
+
+  // Chỉ nhận URL ảnh HTTP/HTTPS
+  let safeUrl = "";
+
+  try {
+    const parsed = new URL(avatarUrl);
+
+    if (
+      parsed.protocol === "http:" ||
+      parsed.protocol === "https:"
+    ) {
+      safeUrl = parsed.href;
+    }
+  } catch {
+    // URL không hợp lệ: dùng chữ cái đại diện
+  }
+
+  if (!safeUrl) {
+    avatar.style.backgroundImage = "";
+    avatar.style.backgroundSize = "";
+    avatar.textContent =
+      (currentUser?.full_name || "U").charAt(0).toUpperCase();
+    return;
+  }
+
+  avatar.textContent = "";
+  avatar.style.backgroundImage = `url("${safeUrl.replace(/"/g, "%22")}")`;
+  avatar.style.backgroundSize = "cover";
+  avatar.style.backgroundPosition = "center";
+}
+
+
+// 2. Cập nhật thông tin tài khoản
+async function saveUserProfile() {
+  const fullName = document.getElementById(
+    "profFullName"
+  ).value.trim();
+
+  const phone = document.getElementById(
+    "profPhone"
+  ).value.trim();
+
+  const avatarUrl = document.getElementById(
+    "profAvatarUrl"
+  ).value.trim();
+
+  if (!fullName) {
     showToast("Họ tên không được để trống!", "error");
     return;
   }
 
-  currentUser.full_name = newName;
-  currentUser.phone = newPhone;
+  if (avatarUrl) {
+    try {
+      const url = new URL(avatarUrl);
 
-  localStorage.setItem("auth_user", JSON.stringify(currentUser));
-  setupUserHeader();
-  showToast("Cập nhật thông tin cá nhân thành công!", "success");
+      if (!["http:", "https:"].includes(url.protocol)) {
+        throw new Error("Invalid protocol");
+      }
+    } catch {
+      showToast("URL ảnh đại diện không hợp lệ!", "error");
+      return;
+    }
+  }
+
+  try {
+    await api.patch("/profile/me", {
+      full_name: fullName,
+      phone: phone || null,
+      avatar_url: avatarUrl || null
+    });
+
+    showToast(
+      "Cập nhật thông tin cá nhân thành công!",
+      "success"
+    );
+
+    await loadUserProfile();
+
+  } catch (error) {
+    console.error("Lỗi cập nhật hồ sơ:", error);
+
+    showToast(
+      profileError(error, "Không thể cập nhật hồ sơ!"),
+      "error"
+    );
+  }
+}
+
+
+// 3. Cập nhật kỹ năng, khu vực, ngày sinh
+async function saveVolunteerProfile() {
+  const skills = document.getElementById(
+    "profSkills"
+  ).value.trim();
+
+  const area = document.getElementById(
+    "profArea"
+  ).value.trim();
+
+  const dateOfBirth = document.getElementById(
+    "profDateOfBirth"
+  ).value;
+
+  if (dateOfBirth && dateOfBirth > new Date().toLocaleDateString("en-CA")) {
+    showToast("Ngày sinh không được ở tương lai!", "error");
+    return;
+  }
+
+  try {
+    await api.patch("/profile/me/volunteer", {
+      skills: skills || null,
+      area: area || null,
+      date_of_birth: dateOfBirth || null
+    });
+
+    showToast(
+      "Cập nhật kỹ năng và khu vực thành công!",
+      "success"
+    );
+
+    await loadUserProfile();
+
+  } catch (error) {
+    console.error("Lỗi cập nhật kỹ năng:", error);
+
+    showToast(
+      profileError(error, "Không thể cập nhật kỹ năng!"),
+      "error"
+    );
+  }
+}
+
+
+// 4. Đổi mật khẩu
+async function changeUserPassword(event) {
+  event.preventDefault();
+
+  const oldPassword = document.getElementById(
+    "oldPassword"
+  ).value;
+
+  const newPassword = document.getElementById(
+    "newPassword"
+  ).value;
+
+  const confirmPassword = document.getElementById(
+    "confirmPassword"
+  ).value;
+
+  if (!oldPassword || !newPassword || !confirmPassword) {
+    showToast("Vui lòng nhập đầy đủ mật khẩu!", "error");
+    return;
+  }
+
+  if (newPassword.length < 8) {
+    showToast(
+      "Mật khẩu mới phải có ít nhất 8 ký tự!",
+      "error"
+    );
+    return;
+  }
+
+  if (newPassword !== confirmPassword) {
+    showToast(
+      "Xác nhận mật khẩu không khớp!",
+      "error"
+    );
+    return;
+  }
+
+  if (oldPassword === newPassword) {
+    showToast(
+      "Mật khẩu mới phải khác mật khẩu cũ!",
+      "error"
+    );
+    return;
+  }
+
+  const submitButton = event.currentTarget.querySelector(
+    'button[type="submit"]'
+  );
+
+  if (submitButton) {
+    submitButton.disabled = true;
+  }
+
+  try {
+    await api.post("/profile/change-password", {
+      old_password: oldPassword,
+      new_password: newPassword
+    });
+
+    showToast(
+      "Đổi mật khẩu thành công! Vui lòng đăng nhập lại.",
+      "success"
+    );
+
+    event.currentTarget.reset();
+
+    // Backend đã thu hồi các phiên đăng nhập
+    Auth.clearSession();
+
+    setTimeout(() => {
+      window.location.replace("login.html");
+    }, 1200);
+
+  } catch (error) {
+    console.error("Lỗi đổi mật khẩu:", error);
+
+    showToast(
+      profileError(error, "Không thể đổi mật khẩu!"),
+      "error"
+    );
+
+    if (submitButton) {
+      submitButton.disabled = false;
+    }
+  }
 }
 
 // ================= TAB 6: ĐĂNG KÝ TRỞ THÀNH TỔ CHỨC (UPGRADE TO ORGANIZER) =================
