@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bảng điều khiển Nhà tổ chức - VolunteerLink</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/dashboard.css">
+  <link rel="stylesheet" href="../css/responsive.css">
+</head>
+<body class="dash-body">
+
+  <!-- TOP HEADER -->
+  <header class="dash-header">
+    <div style="display: flex; align-items: center; gap: 14px;">
+      <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Menu">☰</button>
+      <a href="organizer-dashboard.html" class="dash-brand">
+        <div class="dash-brand-icon" style="background: linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%);">🏢</div>
+        <div class="dash-brand-text">Volunteer<span>Link</span></div>
+      </a>
+      <span class="dash-role-badge dash-role-organizer">🏢 Nhà Tổ Chức</span>
+      <span class="status-pill status-approved" id="orgVerificationBadge">
+        <span class="status-dot"></span> Đã Phê Duyệt
+      </span>
+    </div>
+
+    <div class="dash-header-actions">
+      <div class="dash-user-chip">
+        <div class="dash-avatar dash-avatar-organizer" id="headerAvatar">O</div>
+        <div class="dash-user-info">
+          <span class="dash-user-name" id="headerUserName">Đang tải...</span>
+          <span class="dash-user-role-label" id="headerOrgName">VolunteerLink Hà Nội</span>
+        </div>
+      </div>
+      <button class="dash-btn-logout" id="logoutBtn" title="Đăng xuất">
+        <svg class="svg-icon svg-icon-xs" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        <span>Đăng xuất</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- DASHBOARD LAYOUT -->
+  <div class="dash-layout">
+
+    <!-- SIDEBAR -->
+    <aside class="dash-sidebar" id="dashSidebar">
+      <div>
+        <div class="dash-menu-group">
+          <div class="dash-menu-title">QUẢN TRỊ CHIẾN DỊCH & TNV</div>
+          <nav>
+            <a class="dash-nav-item active-organizer active" data-tab="overview">
+              <span class="dash-nav-icon">📊</span>
+              <span>Tổng quan tổ chức</span>
+            </a>
+            <a class="dash-nav-item" data-tab="campaigns">
+              <span class="dash-nav-icon">📢</span>
+              <span>Quản lý chiến dịch</span>
+              <span class="dash-nav-badge" id="orgCampaignsCount">0</span>
+            </a>
+            <a class="dash-nav-item" data-tab="attendance">
+              <span class="dash-nav-icon">🎯</span>
+              <span>Trạm điểm danh & QR</span>
+              <span class="dash-nav-badge" style="background: #dbeafe; color: #1d4ed8;">Live</span>
+            </a>
+            <a class="dash-nav-item" data-tab="volunteers">
+              <span class="dash-nav-icon">👥</span>
+              <span>Duyệt đơn đăng ký</span>
+              <span class="dash-nav-badge alert" id="pendingApplicantsBadge">0</span>
+            </a>
+            <a class="dash-nav-item" data-tab="certificates">
+              <span class="dash-nav-icon">🎖️</span>
+              <span>Cấp chứng chỉ & Giờ làm</span>
+            </a>
+            <a class="dash-nav-item" data-tab="profile">
+              <span class="dash-nav-icon">🏢</span>
+              <span>Hồ sơ pháp lý tổ chức</span>
+            </a>
+          </nav>
+        </div>
+      </div>
+
+      <div class="dash-sidebar-footer">
+        <a href="index.html" class="dash-nav-item" style="color: #64748b;">
+          <span class="dash-nav-icon">🏠</span>
+          <span>Về trang chủ</span>
+        </a>
+      </div>
+    </aside>
+
+    <!-- MAIN VIEW -->
+    <main class="dash-main">
+
+      <!-- Banner if organization is pending or rejected -->
+      <div id="orgStatusAlertBanner" style="display: none;"></div>
+
+      <!-- ================= TAB 1: OVERVIEW ================= -->
+      <section class="tab-panel active" id="tab-overview">
+        <div class="dash-breadcrumb">
+          <a href="#">Nhà tổ chức</a> &rsaquo; <span class="current">Tổng quan điều phối</span>
+        </div>
+
+        <div class="dash-page-header">
+          <div class="dash-page-title">
+            <h1>Trung Tâm Điều Phối: <span id="overviewOrgTitle">VolunteerLink Hà Nội</span></h1>
+            <p>Quản lý các hoạt động thiện nguyện, kiểm soát nhân sự và cấp chứng chỉ uy tín.</p>
+          </div>
+          <div class="dash-page-actions">
+            <button class="btn btn-primary" onclick="openCreateCampaignModal()">
+              <span>➕ Tạo chiến dịch mới</span>
+            </button>
+            <button class="btn btn-outline" onclick="switchOrgTab('attendance')">
+              <span>🎯 Mở trạm điểm danh</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 4 KPI Cards -->
+        <div class="dash-kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-card-header">
+              <span class="kpi-title">Tổng chiến dịch</span>
+              <div class="kpi-icon-wrap kpi-icon-blue">📢</div>
+            </div>
+            <div class="kpi-value" id="kpiOrgCampaigns">0</div>
+            <div class="kpi-meta positive">● Mở tuyển công khai trên hệ thống</div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-card-header">
+              <span class="kpi-title">Lượt TNV tham gia</span>
+              <div class="kpi-icon-wrap kpi-icon-green">👥</div>
+            </div>
+            <div class="kpi-value" id="kpiOrgVolunteers">0</div>
+            <div class="kpi-meta positive">Đã hoàn thành xuất sắc</div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-card-header">
+              <span class="kpi-title">Đơn chờ duyệt</span>
+              <div class="kpi-icon-wrap kpi-icon-amber">⏳</div>
+            </div>
+            <div class="kpi-value" id="kpiOrgPendingApplicants">0</div>
+            <div class="kpi-meta alert">Cần xử lý kịp hạn chót</div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-card-header">
+              <span class="kpi-title">Giờ đóng góp cộng đồng</span>
+              <div class="kpi-icon-wrap kpi-icon-purple">⏱️</div>
+            </div>
+            <div class="kpi-value" id="kpiOrgTotalHours">0.0h</div>
+            <div class="kpi-meta">Được chứng nhận chính thức</div>
+          </div>
+        </div>
+
+        <!-- Ongoing Campaign Status -->
+        <div class="dash-card">
+          <div class="dash-card-header">
+            <div>
+              <h2>Chiến Dịch Đang Triển Khai Gần Nhất</h2>
+              <p>Trạng thái hoạt động, sĩ số tham gia và mã điểm danh tức thời</p>
+            </div>
+            <button class="btn btn-outline btn-sm" onclick="switchOrgTab('campaigns')">Xem tất cả ➔</button>
+          </div>
+          <div class="dash-card-body" id="orgActiveCampaignBanner">
+            <!-- Loaded dynamically -->
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TAB 2: QUẢN LÝ CHIẾN DỊCH ================= -->
+      <section class="tab-panel" id="tab-campaigns">
+        <div class="dash-breadcrumb">
+          <a href="#">Nhà tổ chức</a> &rsaquo; <span class="current">Quản lý chiến dịch</span>
+        </div>
+
+        <div class="dash-page-header">
+          <div class="dash-page-title">
+            <h1>Danh Sách Chiến Dịch Của Tổ Chức</h1>
+            <p>Tạo bản nháp (DRAFT), gửi Admin phê duyệt (PENDING), và kích hoạt tuyển quân (OPEN).</p>
+          </div>
+          <button class="btn btn-primary" onclick="openCreateCampaignModal()">
+            <span>➕ Tạo chiến dịch mới</span>
+          </button>
+        </div>
+
+        <!-- Filter bar -->
+        <div class="filter-bar">
+          <div class="search-input-wrap">
+            <span class="search-input-icon">🔍</span>
+            <input type="text" id="orgCampaignSearch" placeholder="Tìm theo tên chiến dịch, địa điểm..." oninput="filterOrgCampaigns()" />
+          </div>
+          <select id="orgCampaignStatusFilter" class="select-filter" onchange="filterOrgCampaigns()">
+            <option value="">Tất cả trạng thái</option>
+            <option value="DRAFT">Bản nháp (DRAFT)</option>
+            <option value="PENDING">Chờ Admin duyệt (PENDING)</option>
+            <option value="OPEN">Đang mở tuyển (OPEN)</option>
+            <option value="COMPLETED">Đã hoàn thành</option>
+          </select>
+        </div>
+
+        <!-- Table Campaigns -->
+        <div class="dash-card">
+          <div class="dash-card-body" style="padding: 0;">
+            <div class="table-responsive">
+              <table class="dash-table">
+                <thead>
+                  <tr>
+                    <th>Chiến dịch</th>
+                    <th>Lĩnh vực & Địa điểm</th>
+                    <th>Thời gian tổ chức</th>
+                    <th>Chỉ tiêu TNV</th>
+                    <th>Trạng thái</th>
+                    <th style="text-align: right;">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody id="orgCampaignsTbody">
+                  <!-- Loaded dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TAB 3: TRẠM ĐIỂM DANH & PHÁT MÃ QR/CODE ================= -->
+      <section class="tab-panel" id="tab-attendance">
+        <div class="dash-breadcrumb">
+          <a href="#">Nhà tổ chức</a> &rsaquo; <span class="current">Trạm điểm danh thực địa</span>
+        </div>
+
+        <div class="dash-page-header">
+          <div class="dash-page-title">
+            <h1>Phát Mã Điểm Danh & Kiểm Soát Vào/Ra</h1>
+            <p>Tạo mã 6 ký tự ngẫu nhiên bằng FastAPI backend và trình chiếu cho Tình nguyện viên tại địa điểm.</p>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <!-- Live Code Station Card -->
+          <div>
+            <div class="dash-card">
+              <div class="dash-card-header">
+                <h3>Cấu Hình & Sinh Mã Điểm Danh Mới</h3>
+                <span class="dash-role-badge dash-role-organizer">Tạo mã ngẫu nhiên 6 ký tự</span>
+              </div>
+              <div class="dash-card-body">
+                <div class="dash-form-group">
+                  <label>Chọn chiến dịch áp dụng:</label>
+                  <select id="codeGenCampaignSelect" class="form-control" style="font-weight: 700;"></select>
+                </div>
+
+                <div class="dash-form-group">
+                  <label>Thời gian hiệu lực của mã (phút):</label>
+                  <select id="codeGenExpiresSelect" class="form-control">
+                    <option value="15">15 phút (Khuyến nghị cho đầu ca)</option>
+                    <option value="30" selected>30 phút</option>
+                    <option value="60">60 phút (1 giờ)</option>
+                    <option value="120">120 phút (2 giờ)</option>
+                  </select>
+                  <div class="dash-form-hint">Mã sẽ tự động vô hiệu hóa sau thời gian này để chống gian lận.</div>
+                </div>
+
+                <button type="button" class="btn btn-primary btn-block" id="btnGenerateAttendanceCode" style="padding: 13px; font-weight: 700; font-size: 15px;">
+                  ⚡ Tạo Mã Điểm Danh Mới (POST /api/attendances/code)
+                </button>
+              </div>
+            </div>
+
+            <!-- Big Projector Display -->
+            <div class="live-code-card" id="projectorCard">
+              <div class="live-code-header">MÃ ĐIỂM DANH ĐANG HOẠT ĐỘNG</div>
+              <div class="live-code-number" id="liveDisplayCode">------</div>
+              <div class="live-code-timer" id="liveDisplayTimer">
+                <span>⏳ Thời hạn: Chưa kích hoạt mã</span>
+              </div>
+              <div>
+                <button type="button" class="btn btn-outline btn-sm" style="color: #fff; border-color: rgba(255,255,255,0.4);" onclick="copyLiveCode()">
+                  📋 Sao chép mã
+                </button>
+                <button type="button" class="btn btn-outline btn-sm" style="color: #fff; border-color: rgba(255,255,255,0.4); margin-left: 8px;" onclick="toggleFullScreenProjector()">
+                  🖥️ Chế độ Máy chiếu
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Real-time Attendance List -->
+          <div>
+            <div class="dash-card">
+              <div class="dash-card-header">
+                <h3>Danh Sách TNV Đã Điểm Danh Ca Này</h3>
+                <button class="btn btn-outline btn-sm" onclick="renderLiveAttendanceList()">Làm mới</button>
+              </div>
+              <div class="dash-card-body" style="padding: 0;">
+                <table class="dash-table">
+                  <thead>
+                    <tr>
+                      <th>TNV</th>
+                      <th>Giờ Check-in</th>
+                      <th>Giờ Check-out</th>
+                      <th>Số phút</th>
+                    </tr>
+                  </thead>
+                  <tbody id="liveAttendanceTbody">
+                    <!-- Loaded dynamically -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TAB 4: DUYỆT ĐƠN ĐĂNG KÝ TNV ================= -->
+      <section class="tab-panel" id="tab-volunteers">
+        <div class="dash-breadcrumb">
+          <a href="#">Nhà tổ chức</a> &rsaquo; <span class="current">Xét duyệt đơn đăng ký</span>
+        </div>
+
+        <div class="dash-page-header">
+          <div class="dash-page-title">
+            <h1>Hồ Sơ Tình Nguyện Viên Nộp Đơn</h1>
+            <p>Xem xét kỹ năng, động lực tham gia và phê duyệt danh sách chính thức cho chiến dịch.</p>
+          </div>
+        </div>
+
+        <div class="dash-card">
+          <div class="dash-card-body" style="padding: 0;">
+            <div class="table-responsive">
+              <table class="dash-table">
+                <thead>
+                  <tr>
+                    <th>Tình nguyện viên</th>
+                    <th>Chiến dịch đăng ký</th>
+                    <th>Ngày nộp</th>
+                    <th>Lời nhắn / Động lực</th>
+                    <th>Trạng thái</th>
+                    <th style="text-align: right;">Quyết định</th>
+                  </tr>
+                </thead>
+                <tbody id="orgApplicantsTbody">
+                  <!-- Loaded dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TAB 5: CẤP CHỨNG CHỈ & KHIẾU NẠI GIỜ ================= -->
+      <section class="tab-panel" id="tab-certificates">
+        <div class="dash-breadcrumb">
+          <a href="#">Nhà tổ chức</a> &rsaquo; <span class="current">Chứng chỉ & Khiếu nại</span>
+        </div>
+
+        <div class="dash-page-header">
+          <div class="dash-page-title">
+            <h1>Cấp Chứng Chỉ & Xác Nhận Giờ Làm</h1>
+            <p>Phê duyệt khiếu nại giờ phát sinh và phát hành chứng chỉ điện tử chính thức cho TNV.</p>
+          </div>
+          <button class="btn btn-primary" onclick="openIssueCertModal()">
+            <span>🎓 Phát hành chứng chỉ mới</span>
+          </button>
+        </div>
+
+        <div class="grid-2">
+          <!-- Pending Hour Claims -->
+          <div class="dash-card">
+            <div class="dash-card-header">
+              <h3>Khiếu Nại Bổ Sung Giờ Cần Duyệt</h3>
+            </div>
+            <div class="dash-card-body" style="padding: 0;">
+              <table class="dash-table">
+                <thead>
+                  <tr>
+                    <th>TNV</th>
+                    <th>Giờ đề xuất</th>
+                    <th>Minh chứng</th>
+                    <th style="text-align: right;">Hành động</th>
+                  </tr>
+                </thead>
+                <tbody id="orgClaimsTbody">
+                  <!-- Loaded dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Issued Certificates list -->
+          <div class="dash-card">
+            <div class="dash-card-header">
+              <h3>Chứng Chỉ Tổ Chức Đã Phát Hành</h3>
+            </div>
+            <div class="dash-card-body" style="padding: 0;">
+              <table class="dash-table">
+                <thead>
+                  <tr>
+                    <th>Mã chứng chỉ</th>
+                    <th>Chiến dịch</th>
+                    <th>Số giờ</th>
+                    <th>Ngày cấp</th>
+                  </tr>
+                </thead>
+                <tbody id="orgIssuedCertsTbody">
+                  <!-- Loaded dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TAB 6: HỒ SƠ TỔ CHỨC ================= -->
+      <section class="tab-panel" id="tab-profile">
+        <div class="dash-breadcrumb">
+          <a href="#">Nhà tổ chức</a> &rsaquo; <span class="current">Hồ sơ pháp lý tổ chức</span>
+        </div>
+
+        <div class="dash-page-header">
+          <div class="dash-page-title">
+            <h1>Thông Tin Đơn Vị Tổ Chức</h1>
+            <p>Cập nhật hồ sơ pháp lý, địa chỉ trụ sở và thông tin người đại diện (OrganizationModel).</p>
+          </div>
+        </div>
+
+        <div class="dash-card">
+          <div class="dash-card-body" style="max-width: 800px;">
+            <div class="dash-form-row">
+              <div class="dash-form-group">
+                <label>Tên tổ chức / Câu lạc bộ</label>
+                <input type="text" id="orgFormName" class="form-control" />
+              </div>
+              <div class="dash-form-group">
+                <label>Email liên hệ đại diện (Unique)</label>
+                <input type="email" id="orgFormEmail" class="form-control" disabled style="background: #f8fafc;" />
+              </div>
+            </div>
+
+            <div class="dash-form-row">
+              <div class="dash-form-group">
+                <label>Số điện thoại liên lạc</label>
+                <input type="tel" id="orgFormPhone" class="form-control" />
+              </div>
+              <div class="dash-form-group">
+                <label>Địa chỉ văn phòng / Trụ sở</label>
+                <input type="text" id="orgFormAddress" class="form-control" />
+              </div>
+            </div>
+
+            <div class="dash-form-group">
+              <label>Đường dẫn tài liệu / Giấy phép thành lập (document_url):</label>
+              <input type="url" id="orgFormDocUrl" class="form-control" placeholder="https://example.com/docs/giay-phep.pdf" />
+              <div class="dash-form-hint">Admin căn cứ vào tài liệu này để phê duyệt quyền hạn cho tổ chức.</div>
+            </div>
+
+            <div class="dash-form-group">
+              <label>Mô tả sứ mệnh và lĩnh vực hoạt động:</label>
+              <textarea id="orgFormDesc" rows="4" class="form-control"></textarea>
+            </div>
+
+            <button type="button" class="btn btn-primary" onclick="saveOrgProfile()">
+              Cập Nhật Hồ Sơ Tổ Chức
+            </button>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- MODAL: TẠO CHIẾN DỊCH MỚI (FastAPI Schema CampaignCreate) -->
+  <div class="dash-modal-backdrop" id="createCampaignModal">
+    <div class="dash-modal" style="max-width: 680px;">
+      <div class="dash-modal-header">
+        <h3>Tạo Chiến Dịch Tình Nguyện Mới</h3>
+        <button class="dash-modal-close" onclick="closeModal('createCampaignModal')">&times;</button>
+      </div>
+      <div class="dash-modal-body">
+        <div class="dash-form-group">
+          <label>Tên chiến dịch (*):</label>
+          <input type="text" id="newCampTitle" class="form-control" placeholder="Ví dụ: Chiến Dịch Mùa Hè Xanh 2026" required />
+        </div>
+
+        <div class="dash-form-row">
+          <div class="dash-form-group">
+            <label>Lĩnh vực hoạt động (*):</label>
+            <select id="newCampCategory" class="form-control">
+              <option value="Môi trường">Môi trường</option>
+              <option value="Giáo dục">Giáo dục</option>
+              <option value="Y tế">Y tế</option>
+              <option value="Cộng đồng">Cộng đồng</option>
+              <option value="Cứu trợ khẩn cấp">Cứu trợ khẩn cấp</option>
+            </select>
+          </div>
+          <div class="dash-form-group">
+            <label>Địa điểm tổ chức (*):</label>
+            <input type="text" id="newCampLocation" class="form-control" placeholder="Ví dụ: Huyện Ba Vì, Hà Nội" required />
+          </div>
+        </div>
+
+        <div class="dash-form-row">
+          <div class="dash-form-group">
+            <label>Thời gian bắt đầu (*):</label>
+            <input type="datetime-local" id="newCampStart" class="form-control" required />
+          </div>
+          <div class="dash-form-group">
+            <label>Thời gian kết thúc (*):</label>
+            <input type="datetime-local" id="newCampEnd" class="form-control" required />
+          </div>
+        </div>
+
+        <div class="dash-form-row">
+          <div class="dash-form-group">
+            <label>Hạn chót đăng ký (*):</label>
+            <input type="datetime-local" id="newCampDeadline" class="form-control" required />
+          </div>
+          <div class="dash-form-group">
+            <label>Số lượng TNV tối đa (*):</label>
+            <input type="number" id="newCampMaxPart" min="1" value="30" class="form-control" required />
+          </div>
+        </div>
+
+        <div class="dash-form-group">
+          <label>Số giờ tình nguyện dự kiến (*):</label>
+          <input type="number" id="newCampHours" min="0.5" step="0.5" value="4.0" class="form-control" required />
+        </div>
+
+        <div class="dash-form-group">
+          <label>Yêu cầu đối với Tình nguyện viên:</label>
+          <textarea id="newCampRequirements" rows="2" class="form-control" placeholder="Sức khỏe tốt, trang phục gọn gàng, mang theo giấy tờ cá nhân..."></textarea>
+        </div>
+
+        <div class="dash-form-group">
+          <label>Mô tả chi tiết nội dung hoạt động (*):</label>
+          <textarea id="newCampDescription" rows="3" class="form-control" placeholder="Mục đích, kế hoạch cụ thể của chuyến đi..."></textarea>
+        </div>
+      </div>
+      <div class="dash-modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('createCampaignModal')">Hủy</button>
+        <button class="btn btn-primary" onclick="submitCreateCampaign()">Tạo Bản Nháp (DRAFT)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CẤP CHỨNG CHỈ (Issue Certificate) -->
+  <div class="dash-modal-backdrop" id="issueCertModal">
+    <div class="dash-modal">
+      <div class="dash-modal-header">
+        <h3>Phát Hành Chứng Chỉ Điện Tử</h3>
+        <button class="dash-modal-close" onclick="closeModal('issueCertModal')">&times;</button>
+      </div>
+      <div class="dash-modal-body">
+        <div class="dash-form-group">
+          <label>Chiến dịch:</label>
+          <select id="certCampaignSelect" class="form-control"></select>
+        </div>
+        <div class="dash-form-group">
+          <label>Chọn Tình nguyện viên:</label>
+          <select id="certVolunteerSelect" class="form-control"></select>
+        </div>
+        <div class="dash-form-group">
+          <label>Tổng số giờ công nhận (Float):</label>
+          <input type="number" id="certHoursInput" step="0.5" min="0.5" value="4.5" class="form-control" />
+        </div>
+      </div>
+      <div class="dash-modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('issueCertModal')">Hủy</button>
+        <button class="btn btn-primary" onclick="submitIssueCertificate()">Phát Hành Chứng Chỉ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Axios & Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/axios@1.7.9/dist/axios.min.js"></script>
+  <script src="../js/config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/data_store.js"></script>
+  <script src="../js/utils.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/organizer_dashboard.js"></script>
+
+</body>
+</html>
+
