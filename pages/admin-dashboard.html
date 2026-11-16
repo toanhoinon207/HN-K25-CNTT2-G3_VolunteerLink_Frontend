@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bảng điều khiển Quản trị viên - VolunteerLink Admin</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/dashboard.css">
+  <link rel="stylesheet" href="../css/responsive.css">
+</head>
+<body class="dash-body">
+
+  <!-- TOP HEADER -->
+  <header class="dash-header">
+    <div style="display: flex; align-items: center; gap: 14px;">
+      <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Menu">☰</button>
+      <a href="admin-dashboard.html" class="dash-brand">
+        <div class="dash-brand-icon" style="background: linear-gradient(135deg, #6d28d9 0%, #8b5cf6 100%);">🛡️</div>
+        <div class="dash-brand-text">Volunteer<span>Link</span></div>
+      </a>
+      <span class="dash-role-badge dash-role-admin">🛡️ Quản Trị Hệ Thống</span>
+      <span class="status-pill status-open" style="background: #faf5ff; color: #6b21a8; border-color: #d8b4fe;">
+        <span class="status-dot" style="background: #9333ea;"></span> Root Access
+      </span>
+    </div>
+
+    <div class="dash-header-actions">
+      <div class="dash-user-chip">
+        <div class="dash-avatar dash-avatar-admin" id="headerAvatar">A</div>
+        <div class="dash-user-info">
+          <span class="dash-user-name" id="headerUserName">Nguyễn Văn Admin</span>
+          <span class="dash-user-role-label">Quản trị viên cấp cao</span>
+        </div>
+      </div>
+      <button class="dash-btn-logout" id="logoutBtn" title="Đăng xuất">
+        <svg class="svg-icon svg-icon-xs" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        <span>Đăng xuất</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- DASHBOARD LAYOUT -->
+  <div class="dash-layout">
+
+    <!-- SIDEBAR -->
+    <aside class="dash-sidebar" id="dashSidebar">
+      <div>
+        <div class="dash-menu-group">
+          <div class="dash-menu-title">TRUNG TÂM KIỂM SOÁT</div>
+          <nav>
+            <a class="dash-nav-item active-admin active" data-tab="overview">
+              <span class="dash-nav-icon">📊</span>
+              <span>Tổng quan & Chỉ số</span>
+            </a>
+            <a class="dash-nav-item" data-tab="organizations">
+              <span class="dash-nav-icon">🏢</span>
+              <span>Kiểm duyệt Tổ chức</span>
+              <span class="dash-nav-badge alert" id="pendingOrgsBadge">0</span>
+            </a>
+            <a class="dash-nav-item" data-tab="campaigns">
+              <span class="dash-nav-icon">📢</span>
+              <span>Kiểm duyệt Chiến dịch</span>
+              <span class="dash-nav-badge alert" id="pendingCampsBadge">0</span>
+            </a>
+            <a class="dash-nav-item" data-tab="users">
+              <span class="dash-nav-icon">👥</span>
+              <span>Quản lý Người dùng</span>
+              <span class="dash-nav-badge" id="totalUsersBadge">0</span>
+            </a>
+            <a class="dash-nav-item" data-tab="certificates">
+              <span class="dash-nav-icon">🎖️</span>
+              <span>Giám sát Chứng chỉ</span>
+            </a>
+            <a class="dash-nav-item" data-tab="settings">
+              <span class="dash-nav-icon">⚙️</span>
+              <span>Cài đặt Hệ thống</span>
+            </a>
+          </nav>
+        </div>
+      </div>
+
+      <div class="dash-sidebar-footer">
+        <a href="index.html" class="dash-nav-item" style="color: #64748b;">
+          <span class="dash-nav-icon">🏠</span>
+          <span>Về trang chủ</span>
+        </a>
+      </div>
+    </aside>
+
+    <!-- MAIN VIEW -->
+    <main class="dash-main">
+
+      <!-- ================= TAB 1: OVERVIEW ================= -->
+      <section class="tab-panel active" id="tab-overview">
+        <div class="dash-breadcrumb">
+          <a href="#">Quản trị viên</a> &rsaquo; <span class="current">Báo cáo tổng quan</span>
+        </div>
+
+        <div class="dash-page-header">
+          <div class="dash-page-title">
+            <h1>Trung Tâm Giám Sát VolunteerLink</h1>
+            <p>Hệ thống giám sát vận hành toàn quốc: Kiểm duyệt nội dung, phân quyền và bảo mật tài khoản.</p>
+          </div>
+          <div class="dash-page-actions">
+            <button class="btn btn-outline" onclick="exportSystemReport()">
+              <span>📥 Xuất Báo Cáo Tổng Hợp</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 4 KPI Cards -->
+        <div class="dash-kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-card-header">
+              <span class="kpi-title">Tổng người dùng</span>
+              <div class="kpi-icon-wrap kpi-icon-purple">👥</div>
+            </div>
+            <div class="kpi-value" id="adminKpiUsers">0</div>
+            <div class="kpi-meta positive">Bao gồm USER, ORGANIZER, ADMIN</div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-card-header">
+              <span class="kpi-title">Tổ chức đăng ký</span>
+              <div class="kpi-icon-wrap kpi-icon-blue">🏢</div>
+            </div>
+            <div class="kpi-value" id="adminKpiOrgs">0</div>
+            <div class="kpi-meta" id="adminKpiOrgsMeta">0 tổ chức chờ phê duyệt</div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-card-header">
+              <span class="kpi-title">Chiến dịch toàn quốc</span>
+              <div class="kpi-icon-wrap kpi-icon-green">📢</div>
+            </div>
+            <div class="kpi-value" id="adminKpiCampaigns">0</div>
+            <div class="kpi-meta positive">Đang mở tuyển và triển khai</div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-card-header">
+              <span class="kpi-title">Hồ sơ cần duyệt gấp</span>
+              <div class="kpi-icon-wrap kpi-icon-red">⏳</div>
+            </div>
+            <div class="kpi-value" id="adminKpiPendingAll" style="color: #b91c1c;">0</div>
+            <div class="kpi-meta alert">Tổ chức & Chiến dịch PENDING</div>
+          </div>
+        </div>
+
+        <!-- Urgent Action Banners -->
+        <div class="grid-2">
+          <!-- Pending Organizations Queue -->
+          <div class="dash-card">
+            <div class="dash-card-header">
+              <div>
+                <h3>Tổ Chức Chờ Xét Duyệt Pháp Lý</h3>
+                <p>Cần kiểm tra giấy phép trước khi cho phép đăng tuyển</p>
+              </div>
+              <button class="btn btn-outline btn-sm" onclick="switchAdminTab('organizations')">Xem tất cả ➔</button>
+            </div>
+            <div class="dash-card-body" style="padding: 0;">
+              <table class="dash-table">
+                <thead>
+                  <tr>
+                    <th>Tổ chức</th>
+                    <th>Ngày nộp</th>
+                    <th style="text-align: right;">Xử lý</th>
+                  </tr>
+                </thead>
+                <tbody id="adminQuickPendingOrgsTbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Pending Campaigns Queue -->
+          <div class="dash-card">
+            <div class="dash-card-header">
+              <div>
+                <h3>Chiến Dịch Chờ Kiểm Duyệt Nội Dung</h3>
+                <p>Kiểm tra an toàn, mục tiêu thiện nguyện và tính khả thi</p>
+              </div>
+              <button class="btn btn-outline btn-sm" onclick="switchAdminTab('campaigns')">Xem tất cả ➔</button>
+            </div>
+            <div class="dash-card-body" style="padding: 0;">
+              <table class="dash-table">
+                <thead>
+                  <tr>
+                    <th>Chiến dịch</th>
+                    <th>Lĩnh vực</th>
+                    <th style="text-align: right;">Xử lý</th>
+                  </tr>
+                </thead>
+                <tbody id="adminQuickPendingCampsTbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TAB 2: KIỂM DUYỆT TỔ CHỨC ================= -->
+      <section class="tab-panel" id="tab-organizations">
+        <div class="dash-breadcrumb">
+          <a href="#">Quản trị viên</a> &rsaquo; <span class="current">Kiểm duyệt tổ chức</span>
+        </div>
+
+        <div class="dash-page-header">
+          <div class="dash-page-title">
+            <h1>Hồ Sơ Đăng Ký Của Các Đơn Vị Tổ Chức</h1>
+            <p>Xác minh tính xác thực pháp lý và cấp phép hoạt động trên mạng lưới VolunteerLink.</p>
+          </div>
+        </div>
+
+        <div class="filter-bar">
+          <div class="search-input-wrap">
+            <span class="search-input-icon">🔍</span>
+            <input type="text" id="adminOrgSearch" placeholder="Tìm kiếm theo tên tổ chức, email, địa chỉ..." oninput="filterAdminOrgs()" />
+          </div>
+          <select id="adminOrgStatusFilter" class="select-filter" onchange="filterAdminOrgs()">
+            <option value="">Tất cả trạng thái</option>
+            <option value="PENDING">Chờ phê duyệt (PENDING)</option>
+            <option value="APPROVED">Đã phê duyệt (APPROVED)</option>
+            <option value="REJECTED">Đã từ chối (REJECTED)</option>
+          </select>
+        </div>
+
+        <div class="dash-card">
+          <div class="dash-card-body" style="padding: 0;">
+            <div class="table-responsive">
+              <table class="dash-table">
+                <thead>
+                  <tr>
+                    <th>Tên Tổ chức</th>
+                    <th>Liên hệ & Trụ sở</th>
+                    <th>Tài liệu minh chứng</th>
+                    <th>Trạng thái</th>
+                    <th>Lý do từ chối</th>
+                    <th style="text-align: right;">Phê duyệt</th>
+                  </tr>
+                </thead>
+                <tbody id="adminOrgsTbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TAB 3: KIỂM DUYỆT CHIẾN DỊCH ================= -->
+      <section class="tab-panel" id="tab-campaigns">
+        <div class="dash-breadcrumb">
+          <a href="#">Quản trị viên</a> &rsaquo; <span class="current">Kiểm duyệt chiến dịch</span>
+        </div>
+
+        <div class="dash-page-header">
+          <div class="dash-page-title">
+            <h1>Kiểm Duyệt Chiến Dịch Trước Khi Công Bố</h1>
+            <p>Chỉ những chiến dịch được Admin duyệt (OPEN) mới xuất hiện trên cổng khám phá của TNV.</p>
+          </div>
+        </div>
+
+        <div class="filter-bar">
+          <div class="search-input-wrap">
+            <span class="search-input-icon">🔍</span>
+            <input type="text" id="adminCampSearch" placeholder="Tìm kiếm tên chiến dịch, địa điểm..." oninput="filterAdminCamps()" />
+          </div>
+          <select id="adminCampStatusFilter" class="select-filter" onchange="filterAdminCamps()">
+            <option value="">Tất cả trạng thái</option>
+            <option value="PENDING">Chờ kiểm duyệt (PENDING)</option>
+            <option value="OPEN">Đang mở (OPEN)</option>
+            <option value="DRAFT">Bản nháp (DRAFT)</option>
+            <option value="COMPLETED">Đã hoàn thành</option>
+          </select>
+        </div>
+
+        <div class="dash-card">
+          <div class="dash-card-body" style="padding: 0;">
+            <div class="table-responsive">
+              <table class="dash-table">
+                <thead>
+                  <tr>
+                    <th>Chiến dịch</th>
+                    <th>Tổ chức đề xuất</th>
+                    <th>Thời gian & Địa điểm</th>
+                    <th>Chỉ tiêu TNV</th>
+                    <th>Trạng thái</th>
+                    <th style="text-align: right;">Quyết định</th>
+                  </tr>
+                </thead>
+                <tbody id="adminCampaignsTbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TAB 4: QUẢN LÝ NGƯỜI DÙNG & PHÂN QUYỀN ================= -->
+      <section class="tab-panel" id="tab-users">
+        <div class="dash-breadcrumb">
+          <a href="#">Quản trị viên</a> &rsaquo; <span class="current">Quản lý người dùng</span>
+        </div>
+
+        <div class="dash-page-header">
+          <div class="dash-page-title">
+            <h1>Danh Sách Tài Khoản & Phân Quyền (UserModel)</h1>
+            <p>Kiểm soát quyền truy cập theo 3 vai trò: USER, ORGANIZER, ADMIN. Khóa tài khoản khi có vi phạm.</p>
+          </div>
+        </div>
+
+        <div class="filter-bar">
+          <div class="search-input-wrap">
+            <span class="search-input-icon">🔍</span>
+            <input type="text" id="adminUserSearch" placeholder="Tìm theo họ tên, email, số điện thoại..." oninput="filterAdminUsers()" />
+          </div>
+          <select id="adminUserRoleFilter" class="select-filter" onchange="filterAdminUsers()">
+            <option value="">Tất cả vai trò</option>
+            <option value="USER">USER (Tình nguyện viên)</option>
+            <option value="ORGANIZER">ORGANIZER (Nhà tổ chức)</option>
+            <option value="ADMIN">ADMIN (Quản trị viên)</option>
+          </select>
+          <select id="adminUserStatusFilter" class="select-filter" onchange="filterAdminUsers()">
+            <option value="">Tất cả trạng thái</option>
+            <option value="ACTIVE">Hoạt động (ACTIVE)</option>
+            <option value="LOCKED">Bị khóa (LOCKED)</option>
+          </select>
+        </div>
+
+        <div class="dash-card">
+          <div class="dash-card-body" style="padding: 0;">
+            <div class="table-responsive">
+              <table class="dash-table">
+                <thead>
+                  <tr>
+                    <th>Họ và tên</th>
+                    <th>Email & SĐT</th>
+                    <th>Vai trò (Role)</th>
+                    <th>Trạng thái tài khoản</th>
+                    <th>Ngày tạo</th>
+                    <th style="text-align: right;">Bảo mật</th>
+                  </tr>
+                </thead>
+                <tbody id="adminUsersTbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TAB 5: GIÁM SÁT CHỨNG CHỈ & TRA CỨU ================= -->
+      <section class="tab-panel" id="tab-certificates">
+        <div class="dash-breadcrumb">
+          <a href="#">Quản trị viên</a> &rsaquo; <span class="current">Giám sát chứng chỉ</span>
+        </div>
+
+        <div class="dash-page-header">
+          <div class="dash-page-title">
+            <h1>Tra Cứu & Thu Hồi Chứng Chỉ (CertificateModel)</h1>
+            <p>Xác thực mã số chứng chỉ điện tử. Thu hồi chứng chỉ nếu phát hiện gian lận điểm danh hoặc sai lệch giờ.</p>
+          </div>
+        </div>
+
+        <div class="dash-card">
+          <div class="dash-card-header">
+            <h3>Danh Sách Chứng Chỉ Đã Cấp Toàn Hệ Thống</h3>
+          </div>
+          <div class="dash-card-body" style="padding: 0;">
+            <div class="table-responsive">
+              <table class="dash-table">
+                <thead>
+                  <tr>
+                    <th>Mã chứng nhận</th>
+                    <th>Người thụ hưởng</th>
+                    <th>Chiến dịch</th>
+                    <th>Tổng giờ</th>
+                    <th>Trạng thái</th>
+                    <th style="text-align: right;">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody id="adminCertificatesTbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TAB 6: CÀI ĐẶT HỆ THỐNG ================= -->
+      <section class="tab-panel" id="tab-settings">
+        <div class="dash-breadcrumb">
+          <a href="#">Quản trị viên</a> &rsaquo; <span class="current">Cài đặt hệ thống</span>
+        </div>
+
+        <div class="dash-page-header">
+          <div class="dash-page-title">
+            <h1>Cấu Hình Quy Chuẩn Hệ Thống</h1>
+            <p>Thiết lập tiêu chuẩn giờ tình nguyện, an toàn và kết nối FastAPI backend.</p>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="dash-card">
+            <div class="dash-card-header">
+              <h3>Quy Chuẩn Giờ Tình Nguyện</h3>
+            </div>
+            <div class="dash-card-body">
+              <div class="dash-form-group">
+                <label>Số giờ tối đa công nhận trong 1 ca:</label>
+                <input type="number" class="form-control" value="8.0" />
+              </div>
+              <div class="dash-form-group">
+                <label>Thời gian hiệu lực mã điểm danh mặc định (phút):</label>
+                <input type="number" class="form-control" value="30" />
+              </div>
+              <div class="dash-form-group">
+                <label>Thời gian hoàn thành tối thiểu để cấp chứng chỉ (phút):</label>
+                <input type="number" class="form-control" value="60" />
+              </div>
+              <button class="btn btn-primary" onclick="showToast('Đã lưu cấu hình quy chuẩn hệ thống!', 'success')">Lưu Thay Đổi</button>
+            </div>
+          </div>
+
+          <div class="dash-card">
+            <div class="dash-card-header">
+              <h3>Thông Tin Máy Chủ & Kết Nối Backend</h3>
+            </div>
+            <div class="dash-card-body" style="font-size: 13.5px; line-height: 1.8; color: #475569;">
+              <div>🌐 <strong>FastAPI Endpoint:</strong> <code>http://127.0.0.1:8000/api</code></div>
+              <div>🗄️ <strong>Cơ sở dữ liệu:</strong> <code>volunteerlink_db (MySQL 8.0)</code></div>
+              <div>🔒 <strong>Mã hóa bảo mật:</strong> <code>JWT Bearer + Bcrypt</code></div>
+              <div>⚡ <strong>CORS Policy:</strong> <code>Cho phép mọi nguồn (*.localhost)</code></div>
+              <div style="margin-top: 14px;">
+                <button class="btn btn-outline btn-sm" onclick="checkBackendHealth()">Kiểm tra kết nối Backend</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- MODAL: TỪ CHỐI TỔ CHỨC CÓ LÝ DO -->
+  <div class="dash-modal-backdrop" id="rejectOrgModal">
+    <div class="dash-modal">
+      <div class="dash-modal-header">
+        <h3>Từ Chối Phê Duyệt Tổ Chức</h3>
+        <button class="dash-modal-close" onclick="closeModal('rejectOrgModal')">&times;</button>
+      </div>
+      <div class="dash-modal-body">
+        <input type="hidden" id="rejectOrgId" />
+        <p style="font-size: 13.5px; color: #475569;">Vui lòng nêu rõ lý do từ chối để tổ chức bổ sung hồ sơ:</p>
+        <div class="dash-form-group">
+          <textarea id="rejectOrgReasonInput" rows="3" class="form-control" placeholder="Ví dụ: Thiếu giấy phép thành lập hoặc quyết định công nhận ban đại diện..."></textarea>
+        </div>
+      </div>
+      <div class="dash-modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('rejectOrgModal')">Hủy</button>
+        <button class="btn btn-primary" style="background: #ef4444; border-color: #ef4444;" onclick="submitRejectOrg()">Xác Nhận Từ Chối</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: TỪ CHỐI CHIẾN DỊCH -->
+  <div class="dash-modal-backdrop" id="rejectCampModal">
+    <div class="dash-modal">
+      <div class="dash-modal-header">
+        <h3>Yêu Cầu Chỉnh Sửa / Từ Chối Chiến Dịch</h3>
+        <button class="dash-modal-close" onclick="closeModal('rejectCampModal')">&times;</button>
+      </div>
+      <div class="dash-modal-body">
+        <input type="hidden" id="rejectCampId" />
+        <div class="dash-form-group">
+          <label>Lý do từ chối hoặc hướng dẫn điều chỉnh:</label>
+          <textarea id="rejectCampReasonInput" rows="3" class="form-control" placeholder="Ví dụ: Địa điểm tổ chức chưa có phương án đảm bảo an toàn thời tiết..."></textarea>
+        </div>
+      </div>
+      <div class="dash-modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('rejectCampModal')">Hủy</button>
+        <button class="btn btn-primary" style="background: #ef4444; border-color: #ef4444;" onclick="submitRejectCamp()">Gửi Phản Hồi</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: THU HỒI CHỨNG CHỈ (REVOKE CERTIFICATE) -->
+  <div class="dash-modal-backdrop" id="revokeCertModal">
+    <div class="dash-modal">
+      <div class="dash-modal-header">
+        <h3>Thu Hồi Chứng Chỉ Tình Nguyện</h3>
+        <button class="dash-modal-close" onclick="closeModal('revokeCertModal')">&times;</button>
+      </div>
+      <div class="dash-modal-body">
+        <input type="hidden" id="revokeCertId" />
+        <div class="dash-form-group">
+          <label>Lý do thu hồi (revoked_reason):</label>
+          <textarea id="revokeCertReasonInput" rows="3" class="form-control" placeholder="Ví dụ: Phát hiện gian lận mã điểm danh hoặc không có mặt tại sự kiện..."></textarea>
+        </div>
+      </div>
+      <div class="dash-modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('revokeCertModal')">Hủy</button>
+        <button class="btn btn-primary" style="background: #ef4444; border-color: #ef4444;" onclick="submitRevokeCert()">Xác Nhận Thu Hồi</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Axios & Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/axios@1.7.9/dist/axios.min.js"></script>
+  <script src="../js/config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/data_store.js"></script>
+  <script src="../js/utils.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/admin_dashboard.js"></script>
+
+</body>
+</html>
+

@@ -1,0 +1,36 @@
+/* Responsive adjustments for VolunteerLink */
+
+@media (max-width: 1024px) {
+  .grid-4 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  .grid-3 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .grid-4, .grid-3, .grid-2 {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .hero-banner {
+    padding: 36px 18px !important;
+  }
+  
+  .hero-banner h1 {
+    font-size: 1.85rem !important;
+  }
+  
+  .khung-a-center-box {
+    padding: 24px 18px !important;
+    margin: 16px auto !important;
+  }
+  
+  .section-header {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 12px;
+  }
+}
+
