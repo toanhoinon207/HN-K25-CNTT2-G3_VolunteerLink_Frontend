@@ -4,11 +4,14 @@
  */
 
 let currentUser = null;
+let organizations = [];
+const reviewingOrganizations = new Set();
 
 document.addEventListener("DOMContentLoaded", async () => {
   // 1. Kiểm tra xác thực & vai trò ADMIN
   currentUser = await Auth.requireAuth(["ADMIN"]);
   if (!currentUser) return;
+  NotificationsUI.init();
 
   // 2. Thiết lập Header
   setupAdminHeader();
@@ -16,6 +19,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   // 3. Khởi tạo Tabs & Mobile menu
   setupTabs();
   setupMobileMenu();
+
+  const requestedTab = new URLSearchParams(location.search).get("tab");
+  if (requestedTab && document.getElementById("tab-" + requestedTab)) {
+    switchAdminTab(requestedTab);
+  }
+
+  await loadOrganizations();
 
   // 4. Nạp dữ liệu các module
   renderSystemOverview();
@@ -83,7 +93,7 @@ function setupMobileMenu() {
 // ================= TAB 1: SYSTEM OVERVIEW =================
 function renderSystemOverview() {
   const users = DataStore.getUsers();
-  const orgs = DataStore.getOrganizations();
+  const orgs = organizations;
   const camps = DataStore.getCampaigns();
 
   const pendingOrgs = orgs.filter(o => o.status === "PENDING");
@@ -146,7 +156,7 @@ function renderSystemOverview() {
 
 // ================= TAB 2: KIỂM DUYỆT TỔ CHỨC =================
 function renderOrganizationsTable() {
-  const orgs = DataStore.getOrganizations();
+  const orgs = organizations;
   const tbody = document.getElementById("adminOrgsTbody");
   if (!tbody) return;
 
@@ -186,10 +196,10 @@ function renderOrganizationsTable() {
         </td>
         <td style="text-align: right;">
           <div class="btn-group-sm" style="justify-content: flex-end;">
-            ${o.status !== "APPROVED" ? `
+            ${o.status === "PENDING" ? `
               <button class="btn-action btn-action-primary" onclick="approveOrganization(${o.id})">✓ Phê duyệt</button>
             ` : ""}
-            ${o.status !== "REJECTED" ? `
+            ${o.status === "PENDING" ? `
               <button class="btn-action btn-action-danger" onclick="openRejectOrgModal(${o.id})">✕ Từ chối</button>
             ` : ""}
           </div>
@@ -212,33 +222,38 @@ function filterAdminOrgs() {
   });
 }
 
-function approveOrganization(orgId) {
-  DataStore.updateOrgStatus(orgId, "APPROVED", null);
-
-  // Nâng cấp quyền người đại diện tổ chức thành ORGANIZER
-  const org = DataStore.getOrganizations().find(o => o.id === orgId);
-  if (org) {
-    const users = DataStore.getUsers();
-    const owner = users.find(u => u.id === org.owner_id || (org.owner_email && u.email.toLowerCase() === org.owner_email.toLowerCase()));
-    if (owner) {
-      owner.role = "ORGANIZER";
-      DataStore.set(DataStore.STORAGE_KEYS.USERS, users);
-
-      // Đồng bộ phiên đăng nhập nếu trùng tài khoản
-      const activeAuth = Auth.getUser();
-      if (activeAuth && (activeAuth.id === owner.id || activeAuth.email === owner.email)) {
-        activeAuth.role = "ORGANIZER";
-        localStorage.setItem("auth_user", JSON.stringify(activeAuth));
-      }
-      showToast(`Đã phê duyệt tổ chức "${org.name}"! Quyền tài khoản ${owner.email} được nâng cấp thành ORGANIZER.`, "success");
-    } else {
-      showToast(`Đã phê duyệt tổ chức "${org.name}"!`, "success");
-    }
+async function loadOrganizations() {
+  try {
+    const { data } = await api.get("/admin/organizations");
+    organizations = data;
+  } catch (error) {
+    showToast("Không thể tải danh sách tổ chức.", "error");
   }
+}
 
-  renderSystemOverview();
-  renderOrganizationsTable();
-  renderUsersTable();
+async function reviewOrganization(orgId, action, reason) {
+  if (reviewingOrganizations.has(orgId)) return false;
+  reviewingOrganizations.add(orgId);
+  try {
+    const { data } = await api.patch("/admin/organizations/" + orgId + "/review", null, {
+      params: { action, reason }
+    });
+    const organization = organizations.find(item => item.id === orgId);
+    if (organization) Object.assign(organization, {status: data.status, rejection_reason: reason || null});
+    showToast(data.message, "success");
+    renderSystemOverview();
+    renderOrganizationsTable();
+    return true;
+  } catch (error) {
+    showToast(error.response?.data?.detail || "Không thể xử lý hồ sơ.", "error");
+    return false;
+  } finally {
+    reviewingOrganizations.delete(orgId);
+  }
+}
+
+function approveOrganization(orgId) {
+  return reviewOrganization(orgId, "APPROVE");
 }
 
 function openRejectOrgModal(orgId) {
@@ -247,7 +262,7 @@ function openRejectOrgModal(orgId) {
   openModal("rejectOrgModal");
 }
 
-function submitRejectOrg() {
+async function submitRejectOrg() {
   const orgId = parseInt(document.getElementById("rejectOrgId").value);
   const reason = document.getElementById("rejectOrgReasonInput").value.trim();
 
@@ -256,11 +271,7 @@ function submitRejectOrg() {
     return;
   }
 
-  DataStore.updateOrgStatus(orgId, "REJECTED", reason);
-  closeModal("rejectOrgModal");
-  showToast("Đã từ chối phê duyệt tổ chức.", "warning");
-  renderSystemOverview();
-  renderOrganizationsTable();
+  if (await reviewOrganization(orgId, "REJECT", reason)) closeModal("rejectOrgModal");
 }
 
 // ================= TAB 3: KIỂM DUYỆT CHIẾN DỊCH =================
@@ -535,7 +546,7 @@ async function checkBackendHealth() {
 
 function exportSystemReport() {
   const users = DataStore.getUsers();
-  const orgs = DataStore.getOrganizations();
+  const orgs = organizations;
   const camps = DataStore.getCampaigns();
   const certs = DataStore.getCertificates();
 

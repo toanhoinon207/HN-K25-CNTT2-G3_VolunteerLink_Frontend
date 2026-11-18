@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,7 +8,9 @@
   <link rel="stylesheet" href="../css/style.css">
   <link rel="stylesheet" href="../css/dashboard.css">
   <link rel="stylesheet" href="../css/responsive.css">
+  <link rel="stylesheet" href="../css/notifications.css">
 </head>
+
 <body class="dash-body">
 
   <!-- TOP HEADER -->
@@ -25,6 +28,37 @@
     </div>
 
     <div class="dash-header-actions">
+      <div class="vl-notification-wrapper" id="notificationWrapper">
+
+        <button type="button" class="vl-notification-bell" id="notificationBell" aria-label="Thông báo"
+          aria-expanded="false" aria-controls="notificationDropdown">
+          🔔
+          <span class="vl-notification-badge" id="notificationBadge" hidden>0</span>
+        </button>
+
+        <div class="vl-notification-dropdown" id="notificationDropdown" hidden>
+          <div class="vl-notification-heading">
+            <strong>Thông báo</strong>
+
+            <button type="button" id="notificationReadAll" class="vl-notification-read-all">
+              Đọc tất cả
+            </button>
+          </div>
+
+          <div class="vl-notification-list" id="notificationList" aria-live="polite">
+            <div class="vl-notification-empty">
+              Đang tải thông báo...
+            </div>
+          </div>
+
+          <div class="vl-notification-footer">
+            <button type="button" id="notificationRefresh">
+              Làm mới
+            </button>
+          </div>
+        </div>
+
+      </div>
       <div class="dash-user-chip">
         <div class="dash-avatar dash-avatar-organizer" id="headerAvatar">O</div>
         <div class="dash-user-info">
@@ -33,7 +67,11 @@
         </div>
       </div>
       <button class="dash-btn-logout" id="logoutBtn" title="Đăng xuất">
-        <svg class="svg-icon svg-icon-xs" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        <svg class="svg-icon svg-icon-xs" viewBox="0 0 24 24">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+          <polyline points="16 17 21 12 16 7" />
+          <line x1="21" y1="12" x2="9" y2="12" />
+        </svg>
         <span>Đăng xuất</span>
       </button>
     </div>
@@ -188,7 +226,8 @@
         <div class="filter-bar">
           <div class="search-input-wrap">
             <span class="search-input-icon">🔍</span>
-            <input type="text" id="orgCampaignSearch" placeholder="Tìm theo tên chiến dịch, địa điểm..." oninput="filterOrgCampaigns()" />
+            <input type="text" id="orgCampaignSearch" placeholder="Tìm theo tên chiến dịch, địa điểm..."
+              oninput="filterOrgCampaigns()" />
           </div>
           <select id="orgCampaignStatusFilter" class="select-filter" onchange="filterOrgCampaigns()">
             <option value="">Tất cả trạng thái</option>
@@ -261,7 +300,8 @@
                   <div class="dash-form-hint">Mã sẽ tự động vô hiệu hóa sau thời gian này để chống gian lận.</div>
                 </div>
 
-                <button type="button" class="btn btn-primary btn-block" id="btnGenerateAttendanceCode" style="padding: 13px; font-weight: 700; font-size: 15px;">
+                <button type="button" class="btn btn-primary btn-block" id="btnGenerateAttendanceCode"
+                  style="padding: 13px; font-weight: 700; font-size: 15px;">
                   ⚡ Tạo Mã Điểm Danh Mới (POST /api/attendances/code)
                 </button>
               </div>
@@ -275,10 +315,13 @@
                 <span>⏳ Thời hạn: Chưa kích hoạt mã</span>
               </div>
               <div>
-                <button type="button" class="btn btn-outline btn-sm" style="color: #fff; border-color: rgba(255,255,255,0.4);" onclick="copyLiveCode()">
+                <button type="button" class="btn btn-outline btn-sm"
+                  style="color: #fff; border-color: rgba(255,255,255,0.4);" onclick="copyLiveCode()">
                   📋 Sao chép mã
                 </button>
-                <button type="button" class="btn btn-outline btn-sm" style="color: #fff; border-color: rgba(255,255,255,0.4); margin-left: 8px;" onclick="toggleFullScreenProjector()">
+                <button type="button" class="btn btn-outline btn-sm"
+                  style="color: #fff; border-color: rgba(255,255,255,0.4); margin-left: 8px;"
+                  onclick="toggleFullScreenProjector()">
                   🖥️ Chế độ Máy chiếu
                 </button>
               </div>
@@ -344,6 +387,20 @@
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+        <div class="dash-card">
+          <div class="dash-card-header">
+            <h2>Danh sách chờ</h2>
+            <button type="button" class="btn btn-outline" onclick="renderWaitlist()">Làm mới</button>
+          </div>
+          <div class="table-responsive">
+            <table class="dash-table">
+              <thead>
+                <tr><th>Tình nguyện viên</th><th>Chiến dịch</th><th>Vị trí</th><th>Trạng thái</th><th>Thao tác</th></tr>
+              </thead>
+              <tbody id="orgWaitlistTbody"></tbody>
+            </table>
           </div>
         </div>
       </section>
@@ -450,7 +507,8 @@
 
             <div class="dash-form-group">
               <label>Đường dẫn tài liệu / Giấy phép thành lập (document_url):</label>
-              <input type="url" id="orgFormDocUrl" class="form-control" placeholder="https://example.com/docs/giay-phep.pdf" />
+              <input type="url" id="orgFormDocUrl" class="form-control"
+                placeholder="https://example.com/docs/giay-phep.pdf" />
               <div class="dash-form-hint">Admin căn cứ vào tài liệu này để phê duyệt quyền hạn cho tổ chức.</div>
             </div>
 
@@ -479,7 +537,8 @@
       <div class="dash-modal-body">
         <div class="dash-form-group">
           <label>Tên chiến dịch (*):</label>
-          <input type="text" id="newCampTitle" class="form-control" placeholder="Ví dụ: Chiến Dịch Mùa Hè Xanh 2026" required />
+          <input type="text" id="newCampTitle" class="form-control" placeholder="Ví dụ: Chiến Dịch Mùa Hè Xanh 2026"
+            required />
         </div>
 
         <div class="dash-form-row">
@@ -495,7 +554,8 @@
           </div>
           <div class="dash-form-group">
             <label>Địa điểm tổ chức (*):</label>
-            <input type="text" id="newCampLocation" class="form-control" placeholder="Ví dụ: Huyện Ba Vì, Hà Nội" required />
+            <input type="text" id="newCampLocation" class="form-control" placeholder="Ví dụ: Huyện Ba Vì, Hà Nội"
+              required />
           </div>
         </div>
 
@@ -528,12 +588,14 @@
 
         <div class="dash-form-group">
           <label>Yêu cầu đối với Tình nguyện viên:</label>
-          <textarea id="newCampRequirements" rows="2" class="form-control" placeholder="Sức khỏe tốt, trang phục gọn gàng, mang theo giấy tờ cá nhân..."></textarea>
+          <textarea id="newCampRequirements" rows="2" class="form-control"
+            placeholder="Sức khỏe tốt, trang phục gọn gàng, mang theo giấy tờ cá nhân..."></textarea>
         </div>
 
         <div class="dash-form-group">
           <label>Mô tả chi tiết nội dung hoạt động (*):</label>
-          <textarea id="newCampDescription" rows="3" class="form-control" placeholder="Mục đích, kế hoạch cụ thể của chuyến đi..."></textarea>
+          <textarea id="newCampDescription" rows="3" class="form-control"
+            placeholder="Mục đích, kế hoạch cụ thể của chuyến đi..."></textarea>
         </div>
       </div>
       <div class="dash-modal-footer">
@@ -566,7 +628,7 @@
       </div>
       <div class="dash-modal-footer">
         <button class="btn btn-outline" onclick="closeModal('issueCertModal')">Hủy</button>
-        <button class="btn btn-primary" onclick="submitIssueCertificate()">Phát Hành Chứng Chỉ</button>
+        <button class="btn btn-primary" onclick="submitIssueCertificate(this)">Phát Hành Chứng Chỉ</button>
       </div>
     </div>
   </div>
@@ -575,11 +637,12 @@
   <script src="https://cdn.jsdelivr.net/npm/axios@1.7.9/dist/axios.min.js"></script>
   <script src="../js/config.js"></script>
   <script src="../js/api.js"></script>
+  <script src="../js/notifications.js"></script>
   <script src="../js/data_store.js"></script>
   <script src="../js/utils.js"></script>
   <script src="../js/auth.js"></script>
   <script src="../js/organizer_dashboard.js"></script>
 
 </body>
-</html>
 
+</html>

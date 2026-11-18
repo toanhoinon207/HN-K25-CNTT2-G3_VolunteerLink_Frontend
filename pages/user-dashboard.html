@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="../css/style.css">
     <link rel="stylesheet" href="../css/dashboard.css">
     <link rel="stylesheet" href="../css/responsive.css">
+    <link rel="stylesheet" href="../css/notifications.css">
 </head>
 
 <body class="dash-body">
@@ -24,6 +25,38 @@
         </div>
 
         <div class="dash-header-actions">
+            <div class="vl-notification-wrapper" id="notificationWrapper">
+
+                <button type="button" class="vl-notification-bell" id="notificationBell" aria-label="Thông báo"
+                    aria-expanded="false" aria-controls="notificationDropdown">
+                    🔔
+                    <span class="vl-notification-badge" id="notificationBadge" hidden>0</span>
+                </button>
+
+                <div class="vl-notification-dropdown" id="notificationDropdown" hidden>
+                    <div class="vl-notification-heading">
+                        <strong>Thông báo</strong>
+
+                        <button type="button" id="notificationReadAll" class="vl-notification-read-all">
+                            Đọc tất cả
+                        </button>
+                    </div>
+
+                    <div class="vl-notification-list" id="notificationList" aria-live="polite">
+                        <div class="vl-notification-empty">
+                            Đang tải thông báo...
+                        </div>
+                    </div>
+
+                    <div class="vl-notification-footer">
+                        <button type="button" id="notificationRefresh">
+                            Làm mới
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
             <div class="dash-user-chip">
                 <div class="dash-avatar dash-avatar-user" id="headerAvatar">U</div>
                 <div class="dash-user-info">
@@ -721,6 +754,7 @@
     <script src="https://cdn.jsdelivr.net/npm/axios@1.7.9/dist/axios.min.js"></script>
     <script src="../js/config.js"></script>
     <script src="../js/api.js"></script>
+    <script src="../js/notifications.js"></script>
     <script src="../js/data_store.js"></script>
     <script src="../js/utils.js"></script>
     <script src="../js/auth.js"></script>

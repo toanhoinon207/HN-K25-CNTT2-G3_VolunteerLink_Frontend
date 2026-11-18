@@ -3,34 +3,105 @@
  * Tích hợp Backend API: /auth/me, /api/attendances/check-in, /api/attendances/check-out, DataStore
  */
 
+
 let currentUser = null;
+let myOrganization = null;
+let myOrganizationLoaded = false;
+let submittingOrganization = false;
+let submittingRegistration = false;
+let requestedCampaign = null;
+let visibleCampaigns = [];
 
 document.addEventListener("DOMContentLoaded", async () => {
-  // 1. Kiểm tra xác thực & vai trò USER
+  // 1. Kiểm tra đăng nhập
   currentUser = await Auth.requireAuth(["USER", "ORGANIZER"]);
   if (!currentUser) return;
 
-  // 2. Thiết lập thông tin cá nhân trên giao diện
+  if (typeof NotificationsUI !== "undefined") {
+    NotificationsUI.init();
+  } else {
+    console.error("Không tìm thấy NotificationsUI");
+  }
+
+  // 3. Thiết lập Header
   setupUserHeader();
 
-  // 3. Khởi tạo các Tab và Lắng nghe sự kiện
+  // 4. Thiết lập các Tab
   setupTabs();
   setupMobileMenu();
 
-  // 4. Nạp dữ liệu các thành phần
+  // 5. Tải dữ liệu Dashboard
   renderDashboardOverview();
-  renderMyRegistrations();
-  setupAttendanceModule();
-  renderCampaignsList();
-  renderCertificatesAndClaims();
+  const registrationsRendered = renderMyRegistrations();
+  await setupAttendanceModule();
+  const campaignsRendered = renderCampaignsList();
+  const certificatesRendered = renderCertificatesAndClaims();
   setupProfileForm();
-  renderOrganizerApplicationStatus();
+  loadMyOrganization();
 
-  // 5. Đăng xuất
+
+  // Điều hướng từ thông báo đến đúng tab
+  const notificationParams = new URLSearchParams(window.location.search);
+  const requestedTab = notificationParams.get("tab");
+  const requestedCampaignId = notificationParams.get("campaign_id");
+
+  if (requestedTab && document.getElementById("tab-" + requestedTab)) {
+    switchUserTab(requestedTab);
+  }
+
+  if (requestedTab === "overview" && /^\d+$/.test(requestedCampaignId || "")) {
+    await registrationsRendered;
+    const row = document.querySelector('[data-registration-campaign="' + requestedCampaignId + '"]');
+    row?.classList.add("vl-notification-target");
+    row?.scrollIntoView({ block: "center" });
+  }
+
+  if (requestedTab === "campaigns" && /^\d+$/.test(requestedCampaignId || "")) {
+    await campaignsRendered;
+    const campaignId = Number(requestedCampaignId);
+    if (!visibleCampaigns.some(c => c.id === campaignId)) {
+      try {
+        requestedCampaign = (await api.get("/campaigns/" + campaignId)).data;
+        await renderCampaignsList();
+      } catch (error) {
+        showToast(profileError(error, "Không thể mở chiến dịch."), "error");
+      }
+    }
+    const card = document.getElementById("campaign-card-" + campaignId);
+    card?.classList.add("vl-notification-target");
+    card?.scrollIntoView({ block: "center" });
+  }
+
+  if (requestedTab === "certificates" && notificationParams.has("certificate")) {
+    await certificatesRendered;
+    const certificate = document.getElementById("certificate-" + notificationParams.get("certificate"));
+    certificate?.classList.add("vl-notification-target");
+    certificate?.scrollIntoView({ block: "center" });
+  }
+
+  // Tự chọn chiến dịch khi mở thông báo điểm danh
+  if (requestedTab === "attendance" && requestedCampaignId) {
+    const campaignSelect = document.getElementById("checkinCampaignSelect");
+
+    if (campaignSelect) {
+      const matchingOption = Array.from(campaignSelect.options).find(
+        option => option.value === requestedCampaignId
+      );
+
+      if (matchingOption) {
+        campaignSelect.value = requestedCampaignId;
+        campaignSelect.dispatchEvent(new Event("change"));
+      }
+    }
+  }
+
+
+  // 6. Đăng xuất
   document.getElementById("logoutBtn").addEventListener("click", () => {
     Auth.logout();
   });
 });
+
 
 function setupUserHeader() {
   const fullName = currentUser.full_name || currentUser.name || "Tình nguyện viên";
@@ -150,7 +221,7 @@ async function fetchPublicCampaignsFromDB() {
 
 async function renderDashboardOverview() {
   const myRegs = await fetchMyRegistrationsFromDB();
-  const certs = DataStore.getCertificates().filter(c => c.user_id === currentUser.id);
+  const certs = await fetchMyCertificates();
 
   let totalHours = 0;
   certs.forEach(c => {
@@ -204,7 +275,7 @@ async function renderMyRegistrations(forceRefresh = false) {
   tbody.innerHTML = myRegs.map(reg => {
     const st = statusMap[reg.status] || { label: reg.status, class: "status-draft" };
     return `
-      <tr>
+      <tr data-registration-campaign="${Number(reg.campaign_id)}">
         <td>
           <div class="td-title">${escapeHtml(reg.campaign_title || `Chiến dịch #${reg.campaign_id}`)}</div>
           <div class="td-subtitle">Mã đơn: REG-${reg.id}</div>
@@ -223,10 +294,10 @@ async function renderMyRegistrations(forceRefresh = false) {
           <div style="max-width: 260px; font-size: 13px; color: #475569;">${escapeHtml(reg.message || "—")}</div>
         </td>
         <td style="text-align: right;">
-          ${reg.status === "APPROVED" 
-            ? `<button class="btn-action btn-action-primary" onclick="goToAttendance(${reg.campaign_id})">Điểm danh</button>`
-            : `<button class="btn-action" style="color: #64748b;" onclick="showToast('Đang chờ ban tổ chức duyệt', 'info')">Chi tiết</button>`
-          }
+          ${reg.status === "APPROVED"
+        ? `<button class="btn-action btn-action-primary" onclick="goToAttendance(${reg.campaign_id})">Điểm danh</button>`
+        : `<button class="btn-action" style="color: #64748b;" onclick="showToast('Đang chờ ban tổ chức duyệt', 'info')">Chi tiết</button>`
+      }
         </td>
       </tr>
     `;
@@ -250,7 +321,7 @@ async function setupAttendanceModule(forceRefresh = false) {
   if (myApproved.length === 0) {
     select.innerHTML = `<option value="">(Chưa có chiến dịch nào được duyệt để điểm danh trong DB)</option>`;
   } else {
-    select.innerHTML = myApproved.map(reg => 
+    select.innerHTML = myApproved.map(reg =>
       `<option value="${reg.campaign_id}">${escapeHtml(reg.campaign_title || `Chiến dịch #${reg.campaign_id}`)}</option>`
     ).join("");
   }
@@ -398,12 +469,22 @@ function renderAttendanceHistory() {
 }
 
 // ================= TAB 3: CAMPAIGNS EXPLORATION =================
-function renderCampaignsList() {
+async function renderCampaignsList() {
   const container = document.getElementById("campaignsGridContainer");
   if (!container) return;
 
-  const campaigns = DataStore.getCampaigns().filter(c => c.status === "OPEN");
-  const myRegCampaignIds = getMyRegistrationsData().map(r => r.campaign_id);
+  const [publicCampaigns, registrations, waitlist] = await Promise.all([
+    fetchPublicCampaignsFromDB(),
+    fetchMyRegistrationsFromDB(),
+    api.get("/waitlist/mine").then(response => response.data).catch(() => [])
+  ]);
+  visibleCampaigns = publicCampaigns.filter(c => c.status === "OPEN");
+  if (requestedCampaign && !visibleCampaigns.some(c => c.id === requestedCampaign.id)) {
+    visibleCampaigns.unshift(requestedCampaign);
+  }
+  const campaigns = visibleCampaigns;
+  const myRegCampaignIds = registrations.filter(r => r.status !== "CANCELLED").map(r => r.campaign_id);
+  const waitlistByCampaign = new Map(waitlist.map(entry => [entry.campaign_id, entry]));
 
   if (campaigns.length === 0) {
     container.innerHTML = `<div style="grid-column: 1 / -1; text-align: center; padding: 48px; color: #94a3b8;">Hiện chưa có chiến dịch nào mở tuyển.</div>`;
@@ -412,13 +493,15 @@ function renderCampaignsList() {
 
   container.innerHTML = campaigns.map(c => {
     const isRegistered = myRegCampaignIds.includes(c.id);
+    const entry = waitlistByCampaign.get(c.id);
+    const canJoin = !entry || entry.status === "ACCEPTED";
     return `
-      <div class="dash-card" style="margin-bottom: 0;">
+      <div class="dash-card" id="campaign-card-${Number(c.id)}" style="margin-bottom: 0;">
         <div style="height: 120px; background: linear-gradient(135deg, #1e7e55 0%, #10b981 100%); padding: 18px; color: #fff; position: relative;">
           <span style="font-size: 11px; font-weight: 700; background: rgba(0,0,0,0.25); padding: 4px 10px; border-radius: 9999px;">
             ${escapeHtml(c.category)}
           </span>
-          <div style="font-size: 11px; opacity: 0.9; margin-top: 8px;">Tổ chức: ${escapeHtml(c.organization_name || "VolunteerLink")}</div>
+          <div style="font-size: 11px; opacity: 0.9; margin-top: 8px;">Tổ chức: ${escapeHtml(c.organization?.name || c.organization_name || "VolunteerLink")}</div>
         </div>
         <div class="dash-card-body">
           <h3 style="font-size: 16px; margin-bottom: 8px; line-height: 1.3;">${escapeHtml(c.title)}</h3>
@@ -427,13 +510,16 @@ function renderCampaignsList() {
           </p>
           <div style="font-size: 12px; color: #475569; margin-bottom: 12px; line-height: 1.6;">
             <div>📍 <strong>Địa điểm:</strong> ${escapeHtml(c.location)}</div>
-            <div>⏱️ <strong>Giờ công nhận:</strong> ${c.estimated_hours}h</div>
-            <div>👥 <strong>Đã đăng ký:</strong> ${c.registered_count || 0}/${c.max_participants}</div>
+
           </div>
-          ${isRegistered 
-            ? `<button class="btn btn-outline btn-block" disabled style="opacity: 0.7;">✓ Đã gửi đơn đăng ký</button>`
-            : `<button class="btn btn-primary btn-block" onclick="openRegisterModal(${c.id})">Đăng ký tham gia</button>`
-          }
+          ${isRegistered
+        ? `<button class="btn btn-outline btn-block" disabled style="opacity: 0.7;">✓ Đã gửi đơn đăng ký</button>`
+        : c.status !== "OPEN" ? '<p>Chiến dịch đã đóng đăng ký.</p>'
+        : currentUser.role !== "USER" ? ""
+        : `<button class="btn btn-primary btn-block" onclick="openRegisterModal(${Number(c.id)})">Đăng ký tham gia</button>
+          ${canJoin ? `<button class="btn btn-outline btn-block" onclick="joinCampaignWaitlist(${Number(c.id)}, this)">Vào danh sách chờ</button>`
+            : `<p>${entry.status === "INVITED" ? "Đã nhận lời mời đăng ký" : "Đang trong danh sách chờ"}</p>`}`
+      }
         </div>
       </div>
     `;
@@ -453,9 +539,26 @@ function filterCampaigns() {
   });
 }
 
-function openRegisterModal(campaignId) {
-  const camp = DataStore.getCampaigns().find(c => c.id === campaignId);
-  if (!camp) return;
+async function joinCampaignWaitlist(campaignId, button) {
+  button.disabled = true;
+  try {
+    await api.post("/waitlist/campaign/" + campaignId);
+    showToast("Đã vào danh sách chờ.", "success");
+    await renderCampaignsList();
+  } catch (error) {
+    showToast(profileError(error, "Không thể vào danh sách chờ."), "error");
+    button.disabled = false;
+  }
+}
+
+async function openRegisterModal(campaignId) {
+  let camp;
+  try {
+    camp = (await api.get("/campaigns/" + campaignId)).data;
+  } catch (error) {
+    showToast(profileError(error, "Không thể tải chiến dịch."), "error");
+    return;
+  }
 
   document.getElementById("modalCampaignId").value = camp.id;
   document.getElementById("modalCampaignTitle").textContent = `Đăng Ký: ${camp.title}`;
@@ -469,50 +572,49 @@ function openRegisterModal(campaignId) {
   openModal("registerCampaignModal");
 }
 
-function submitCampaignRegistration() {
-  const campaignId = parseInt(document.getElementById("modalCampaignId").value);
+async function submitCampaignRegistration() {
+  if (submittingRegistration) return;
+  const campaign_id = Number(document.getElementById("modalCampaignId").value);
   const message = document.getElementById("modalRegMessage").value.trim();
+  submittingRegistration = true;
+  try {
+    await api.post("/registrations/", { campaign_id, message });
+    closeModal("registerCampaignModal");
+    showToast("Đã gửi đơn đăng ký.", "success");
+    await fetchMyRegistrationsFromDB(true);
+    renderDashboardOverview();
+    renderMyRegistrations();
+    renderCampaignsList();
+    setupAttendanceModule();
+  } catch (error) {
+    showToast(profileError(error, "Không thể gửi đơn đăng ký."), "error");
+  } finally {
+    submittingRegistration = false;
+  }
+}
 
-  const camp = DataStore.getCampaigns().find(c => c.id === campaignId);
-  if (!camp) return;
-
-  const newReg = {
-    user_id: currentUser.id,
-    user_name: currentUser.full_name || currentUser.name,
-    user_email: currentUser.email,
-    user_phone: currentUser.phone,
-    campaign_id: camp.id,
-    campaign_title: camp.title,
-    message: message
-  };
-
-  DataStore.addRegistration(newReg);
-
-  camp.registered_count = (camp.registered_count || 0) + 1;
-  DataStore.saveCampaign(camp);
-
-  closeModal("registerCampaignModal");
-  showToast("Đã nộp đơn đăng ký thành công! Đang chờ tổ chức duyệt.", "success");
-
-  renderDashboardOverview();
-  renderMyRegistrations();
-  renderCampaignsList();
-  setupAttendanceModule();
+async function fetchMyCertificates() {
+  try {
+    return (await api.get("/certificates/me")).data;
+  } catch (error) {
+    showToast(profileError(error, "Không thể tải chứng nhận."), "error");
+    return [];
+  }
 }
 
 // ================= TAB 4: CERTIFICATES & CLAIMS =================
-function renderCertificatesAndClaims() {
+async function renderCertificatesAndClaims() {
   const certsContainer = document.getElementById("certificatesContainer");
   const claimsTbody = document.getElementById("claimsTbody");
 
   // Render Certificates
-  const certs = DataStore.getCertificates().filter(c => c.user_id === currentUser.id);
+  const certs = await fetchMyCertificates();
   if (certsContainer) {
     if (certs.length === 0) {
       certsContainer.innerHTML = `<div style="text-align: center; color: #94a3b8; padding: 24px;">Chưa có chứng chỉ nào được cấp. Hãy hoàn thành các ca tình nguyện để tích lũy!</div>`;
     } else {
       certsContainer.innerHTML = certs.map(c => `
-        <div class="cert-card">
+        <div class="cert-card" id="certificate-${escapeHtml(c.certificate_code)}">
           <span class="cert-code">${escapeHtml(c.certificate_code)}</span>
           <h4 style="margin: 6px 0; font-size: 15px;">${escapeHtml(c.campaign_title)}</h4>
           <div style="font-size: 13px; color: #64748b; margin-bottom: 10px;">
@@ -586,7 +688,7 @@ function submitHourClaim() {
 }
 
 
- // ================= TAB 5: PROFILE =================
+// ================= TAB 5: PROFILE =================
 
 function profileError(error, fallback = "Có lỗi xảy ra!") {
   const detail = error.response?.data?.detail;
@@ -925,14 +1027,27 @@ async function changeUserPassword(event) {
 }
 
 // ================= TAB 6: ĐĂNG KÝ TRỞ THÀNH TỔ CHỨC (UPGRADE TO ORGANIZER) =================
+async function loadMyOrganization() {
+  try {
+    myOrganization = (await api.get("/organizations/me")).data;
+  } catch (error) {
+    if (error.response?.status !== 404) {
+      showToast(profileError(error, "Không thể tải hồ sơ tổ chức."), "error");
+      return;
+    }
+    myOrganization = null;
+  }
+  myOrganizationLoaded = true;
+  renderOrganizerApplicationStatus();
+}
+
 function renderOrganizerApplicationStatus() {
   const container = document.getElementById("orgAppStatusContainer");
   const formCard = document.getElementById("orgAppFormCard");
   const navBadge = document.getElementById("orgUpgradeNavBadge");
   if (!container) return;
 
-  const orgs = DataStore.getOrganizations();
-  const myOrg = orgs.find(o => o.owner_id === currentUser.id || o.owner_email === currentUser.email);
+  const myOrg = myOrganization;
 
   // Điền sẵn thông tin liên hệ của user vào form
   if (document.getElementById("appOrgEmail")) {
@@ -1030,7 +1145,8 @@ function renderOrganizerApplicationStatus() {
   }
 }
 
-function submitOrganizerApplication() {
+async function submitOrganizerApplication() {
+  if (submittingOrganization || !myOrganizationLoaded) return;
   const name = document.getElementById("appOrgName").value.trim();
   const email = document.getElementById("appOrgEmail").value.trim();
   const phone = document.getElementById("appOrgPhone").value.trim();
@@ -1043,40 +1159,20 @@ function submitOrganizerApplication() {
     return;
   }
 
-  const orgs = DataStore.getOrganizations();
-  let existing = orgs.find(o => o.owner_id === currentUser.id || o.owner_email === currentUser.email);
-
-  if (existing) {
-    existing.name = name;
-    existing.email = email;
-    existing.phone = phone;
-    existing.address = address;
-    existing.document_url = docUrl;
-    existing.description = desc;
-    existing.status = "PENDING";
-    existing.rejection_reason = null;
-    existing.updated_at = new Date().toISOString();
-  } else {
-    existing = {
-      id: Date.now(),
-      name: name,
-      email: email,
-      phone: phone,
-      address: address,
-      description: desc,
-      document_url: docUrl,
-      owner_id: currentUser.id,
-      owner_email: currentUser.email,
-      status: "PENDING",
-      rejection_reason: null,
-      created_at: new Date().toISOString()
-    };
-    orgs.unshift(existing);
+  const payload = { name, email, phone, address, document_url: docUrl, description: desc };
+  submittingOrganization = true;
+  try {
+    const response = myOrganization
+      ? await api.put("/organizations/me", payload)
+      : await api.post("/organizations/", payload);
+    myOrganization = response.data;
+    renderOrganizerApplicationStatus();
+    showToast("Đã gửi hồ sơ tổ chức.", "success");
+  } catch (error) {
+    showToast(profileError(error, "Không thể gửi hồ sơ tổ chức."), "error");
+  } finally {
+    submittingOrganization = false;
   }
-
-  DataStore.set(DataStore.STORAGE_KEYS.ORGS, orgs);
-  showToast("Đã gửi hồ sơ thành lập tổ chức lên Quản trị viên (Admin) thành công!", "success");
-  renderOrganizerApplicationStatus();
 }
 
 // Modal helpers
