@@ -12,6 +12,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   currentUser = await Auth.requireAuth(["ORGANIZER"]);
   if (!currentUser) return;
 
+  if (typeof NotificationsUI !== "undefined") {
+    NotificationsUI.init();
+  } else {
+    console.error("Không tìm thấy NotificationsUI");
+  }
   // 2. Tìm thông tin tổ chức sở hữu (từ DB)
   await loadCurrentOrganization();
 
@@ -22,11 +27,37 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupTabs();
   setupMobileMenu();
 
+  // Mở đúng tab khi truy cập từ thông báo
+  const urlParams = new URLSearchParams(window.location.search);
+  const notificationTab = urlParams.get("tab");
+  const notificationCampaignId = urlParams.get("campaign_id");
+
+  if (notificationTab) {
+    const targetPanel = document.getElementById("tab-" + notificationTab);
+
+    if (targetPanel) {
+      switchOrgTab(notificationTab);
+    }
+  }
+
+  // Chọn đúng chiến dịch khi mở thông báo điểm danh
+  if (notificationTab === "attendance" && notificationCampaignId) {
+    setTimeout(() => {
+      const select = document.getElementById("codeGenCampaignSelect");
+
+      if (select) {
+        select.value = notificationCampaignId;
+        select.dispatchEvent(new Event("change"));
+      }
+    }, 0);
+  }
+
   // 5. Nạp dữ liệu các thành phần
   renderOverview();
   renderCampaignsTable();
   setupAttendanceGenerator();
   renderVolunteerApplicants();
+  renderWaitlist();
   renderCertificatesAndClaims();
   setupOrgProfileForm();
 
@@ -382,7 +413,7 @@ function setupAttendanceGenerator() {
   if (!select) return;
 
   const allCampaigns = DataStore.getCampaigns().filter(c => c.organization_id === currentOrg.id || c.organization_name === currentOrg.name);
-  select.innerHTML = allCampaigns.map(c => 
+  select.innerHTML = allCampaigns.map(c =>
     `<option value="${c.id}">${escapeHtml(c.title)} (${c.status})</option>`
   ).join("");
 
@@ -646,7 +677,7 @@ async function rejectVolunteerRegistration(regId, campaignId) {
 }
 
 // ================= TAB 5: CẤP CHỨNG CHỈ & KHIẾU NẠI GIỜ =================
-function renderCertificatesAndClaims() {
+async function renderCertificatesAndClaims() {
   const orgClaimsTbody = document.getElementById("orgClaimsTbody");
   const orgIssuedCertsTbody = document.getElementById("orgIssuedCertsTbody");
 
@@ -678,8 +709,14 @@ function renderCertificatesAndClaims() {
   }
 
   // Render Certificates
-  const certs = DataStore.getCertificates();
   if (orgIssuedCertsTbody) {
+    let certs;
+    try {
+      certs = (await api.get("/certificates/issued")).data;
+    } catch {
+      orgIssuedCertsTbody.innerHTML = '<tr><td colspan="4">Không thể tải chứng nhận.</td></tr>';
+      return;
+    }
     if (certs.length === 0) {
       orgIssuedCertsTbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #94a3b8; padding: 20px;">Chưa phát hành chứng chỉ nào</td></tr>`;
     } else {
@@ -718,48 +755,81 @@ function rejectHourClaim(claimId) {
   }
 }
 
-function openIssueCertModal() {
-  const campSelect = document.getElementById("certCampaignSelect");
-  const volSelect = document.getElementById("certVolunteerSelect");
-
-  const myCampaigns = DataStore.getCampaigns().filter(c => c.organization_id === currentOrg.id || c.organization_name === currentOrg.name);
-  const myUsers = DataStore.getUsers().filter(u => u.role === "USER");
-
-  campSelect.innerHTML = myCampaigns.map(c => `<option value="${c.id}">${escapeHtml(c.title)}</option>`).join("");
-  volSelect.innerHTML = myUsers.map(u => `<option value="${u.id}">${escapeHtml(u.full_name)} (${u.email})</option>`).join("");
-
-  openModal("issueCertModal");
+async function renderWaitlist() {
+  const tbody = document.getElementById("orgWaitlistTbody");
+  try {
+    const { data } = await api.get("/waitlist/managed");
+    const statuses = { WAITING: "Đang chờ", INVITED: "Đã mời", ACCEPTED: "Đã gửi đơn" };
+    tbody.innerHTML = data.map(entry => `
+      <tr>
+        <td>${escapeHtml(entry.user_name)}</td>
+        <td>${escapeHtml(entry.campaign_title)}</td>
+        <td>${Number(entry.position)}</td>
+        <td>${statuses[entry.status] || escapeHtml(entry.status)}</td>
+        <td>${entry.can_invite ? `<button type="button" class="btn-action btn-action-primary"
+          onclick="inviteFromWaitlist(${Number(entry.id)}, this)">Gửi lời mời</button>` : ""}</td>
+      </tr>`).join("") || '<tr><td colspan="5">Chưa có tình nguyện viên trong danh sách chờ.</td></tr>';
+  } catch {
+    tbody.innerHTML = '<tr><td colspan="5">Không thể tải danh sách chờ.</td></tr>';
+  }
 }
 
-function submitIssueCertificate() {
-  const campSelect = document.getElementById("certCampaignSelect");
-  const volSelect = document.getElementById("certVolunteerSelect");
-  const hours = parseFloat(document.getElementById("certHoursInput").value);
+async function inviteFromWaitlist(entryId, button) {
+  button.disabled = true;
+  try {
+    await api.patch("/waitlist/" + entryId + "/invite");
+    showToast("Đã gửi lời mời đăng ký chiến dịch.", "success");
+    await renderWaitlist();
+  } catch (error) {
+    showToast(error.response?.data?.detail || "Không thể gửi lời mời.", "error");
+    button.disabled = false;
+  }
+}
 
-  const campaignId = parseInt(campSelect.value);
-  const userId = parseInt(volSelect.value);
-  const camp = DataStore.getCampaigns().find(c => c.id === campaignId);
+async function openIssueCertModal() {
+  try {
+    const { data } = await api.get("/certificates/eligible");
+    if (!data.length) {
+      showToast("Chưa có tình nguyện viên được duyệt tham gia.", "info");
+      return;
+    }
+    const campaignSelect = document.getElementById("certCampaignSelect");
+    const volunteerSelect = document.getElementById("certVolunteerSelect");
+    const campaigns = new Map(data.map(row => [row.campaign_id, row.campaign_title]));
+    campaignSelect.replaceChildren(...Array.from(campaigns, ([id, title]) => new Option(title, id)));
+    campaignSelect.onchange = () => {
+      const eligible = data.filter(row => row.campaign_id === Number(campaignSelect.value));
+      volunteerSelect.replaceChildren(...eligible.map(row => new Option(row.user_name, row.user_id)));
+    };
+    campaignSelect.onchange();
+    document.getElementById("certHoursInput").value = "";
+    openModal("issueCertModal");
+  } catch {
+    showToast("Không thể tải danh sách người nhận chứng nhận.", "error");
+  }
+}
 
-  const certs = DataStore.getCertificates();
-  const certNumber = Math.floor(1000 + Math.random() * 9000);
-  const newCert = {
-    id: Date.now(),
-    certificate_code: `VL-2026-CERT${certNumber}`,
-    user_id: userId,
-    campaign_id: campaignId,
-    campaign_title: camp ? camp.title : "Chiến dịch tình nguyện",
-    total_hours: hours,
-    issued_at: new Date().toISOString(),
-    status: "ACTIVE",
-    revoked_reason: null
-  };
+async function submitIssueCertificate(button) {
+  const campaign_id = Number(document.getElementById("certCampaignSelect").value);
+  const user_id = Number(document.getElementById("certVolunteerSelect").value);
+  const total_hours = document.getElementById("certHoursInput").value;
+  if (!campaign_id || !user_id || !(Number(total_hours) > 0)) {
+    showToast("Chọn người nhận và nhập số giờ hợp lệ.", "error");
+    return;
+  }
 
-  certs.unshift(newCert);
-  DataStore.set(DataStore.STORAGE_KEYS.CERTIFICATES, certs);
-
-  closeModal("issueCertModal");
-  showToast(`Đã phát hành chứng chỉ: ${newCert.certificate_code}`, "success");
-  renderCertificatesAndClaims();
+  button.disabled = true;
+  try {
+    const { data } = await api.post("/certificates", { campaign_id, user_id, total_hours });
+    closeModal("issueCertModal");
+    showToast("Đã phát hành chứng nhận " + data.certificate_code, "success");
+    await renderCertificatesAndClaims();
+  } catch (error) {
+    const detail = error.response?.data?.detail;
+    showToast(typeof detail === "string" ? detail : "Không thể phát hành chứng nhận. Kiểm tra số giờ đã nhập.", "error");
+  } finally {
+    button.disabled = false;
+  }
 }
 
 // ================= TAB 6: HỒ SƠ TỔ CHỨC =================

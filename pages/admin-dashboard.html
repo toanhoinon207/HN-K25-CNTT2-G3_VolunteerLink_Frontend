@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,7 +8,9 @@
   <link rel="stylesheet" href="../css/style.css">
   <link rel="stylesheet" href="../css/dashboard.css">
   <link rel="stylesheet" href="../css/responsive.css">
+  <link rel="stylesheet" href="../css/notifications.css">
 </head>
+
 <body class="dash-body">
 
   <!-- TOP HEADER -->
@@ -25,6 +28,37 @@
     </div>
 
     <div class="dash-header-actions">
+      <div class="vl-notification-wrapper" id="notificationWrapper">
+
+        <button type="button" class="vl-notification-bell" id="notificationBell" aria-label="Thông báo"
+          aria-expanded="false" aria-controls="notificationDropdown">
+          🔔
+          <span class="vl-notification-badge" id="notificationBadge" hidden>0</span>
+        </button>
+
+        <div class="vl-notification-dropdown" id="notificationDropdown" hidden>
+          <div class="vl-notification-heading">
+            <strong>Thông báo</strong>
+
+            <button type="button" id="notificationReadAll" class="vl-notification-read-all">
+              Đọc tất cả
+            </button>
+          </div>
+
+          <div class="vl-notification-list" id="notificationList" aria-live="polite">
+            <div class="vl-notification-empty">
+              Đang tải thông báo...
+            </div>
+          </div>
+
+          <div class="vl-notification-footer">
+            <button type="button" id="notificationRefresh">
+              Làm mới
+            </button>
+          </div>
+        </div>
+
+      </div>
       <div class="dash-user-chip">
         <div class="dash-avatar dash-avatar-admin" id="headerAvatar">A</div>
         <div class="dash-user-info">
@@ -33,7 +67,11 @@
         </div>
       </div>
       <button class="dash-btn-logout" id="logoutBtn" title="Đăng xuất">
-        <svg class="svg-icon svg-icon-xs" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        <svg class="svg-icon svg-icon-xs" viewBox="0 0 24 24">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+          <polyline points="16 17 21 12 16 7" />
+          <line x1="21" y1="12" x2="9" y2="12" />
+        </svg>
         <span>Đăng xuất</span>
       </button>
     </div>
@@ -213,7 +251,8 @@
         <div class="filter-bar">
           <div class="search-input-wrap">
             <span class="search-input-icon">🔍</span>
-            <input type="text" id="adminOrgSearch" placeholder="Tìm kiếm theo tên tổ chức, email, địa chỉ..." oninput="filterAdminOrgs()" />
+            <input type="text" id="adminOrgSearch" placeholder="Tìm kiếm theo tên tổ chức, email, địa chỉ..."
+              oninput="filterAdminOrgs()" />
           </div>
           <select id="adminOrgStatusFilter" class="select-filter" onchange="filterAdminOrgs()">
             <option value="">Tất cả trạng thái</option>
@@ -260,7 +299,8 @@
         <div class="filter-bar">
           <div class="search-input-wrap">
             <span class="search-input-icon">🔍</span>
-            <input type="text" id="adminCampSearch" placeholder="Tìm kiếm tên chiến dịch, địa điểm..." oninput="filterAdminCamps()" />
+            <input type="text" id="adminCampSearch" placeholder="Tìm kiếm tên chiến dịch, địa điểm..."
+              oninput="filterAdminCamps()" />
           </div>
           <select id="adminCampStatusFilter" class="select-filter" onchange="filterAdminCamps()">
             <option value="">Tất cả trạng thái</option>
@@ -308,7 +348,8 @@
         <div class="filter-bar">
           <div class="search-input-wrap">
             <span class="search-input-icon">🔍</span>
-            <input type="text" id="adminUserSearch" placeholder="Tìm theo họ tên, email, số điện thoại..." oninput="filterAdminUsers()" />
+            <input type="text" id="adminUserSearch" placeholder="Tìm theo họ tên, email, số điện thoại..."
+              oninput="filterAdminUsers()" />
           </div>
           <select id="adminUserRoleFilter" class="select-filter" onchange="filterAdminUsers()">
             <option value="">Tất cả vai trò</option>
@@ -353,7 +394,8 @@
         <div class="dash-page-header">
           <div class="dash-page-title">
             <h1>Tra Cứu & Thu Hồi Chứng Chỉ (CertificateModel)</h1>
-            <p>Xác thực mã số chứng chỉ điện tử. Thu hồi chứng chỉ nếu phát hiện gian lận điểm danh hoặc sai lệch giờ.</p>
+            <p>Xác thực mã số chứng chỉ điện tử. Thu hồi chứng chỉ nếu phát hiện gian lận điểm danh hoặc sai lệch giờ.
+            </p>
           </div>
         </div>
 
@@ -412,7 +454,8 @@
                 <label>Thời gian hoàn thành tối thiểu để cấp chứng chỉ (phút):</label>
                 <input type="number" class="form-control" value="60" />
               </div>
-              <button class="btn btn-primary" onclick="showToast('Đã lưu cấu hình quy chuẩn hệ thống!', 'success')">Lưu Thay Đổi</button>
+              <button class="btn btn-primary" onclick="showToast('Đã lưu cấu hình quy chuẩn hệ thống!', 'success')">Lưu
+                Thay Đổi</button>
             </div>
           </div>
 
@@ -447,12 +490,14 @@
         <input type="hidden" id="rejectOrgId" />
         <p style="font-size: 13.5px; color: #475569;">Vui lòng nêu rõ lý do từ chối để tổ chức bổ sung hồ sơ:</p>
         <div class="dash-form-group">
-          <textarea id="rejectOrgReasonInput" rows="3" class="form-control" placeholder="Ví dụ: Thiếu giấy phép thành lập hoặc quyết định công nhận ban đại diện..."></textarea>
+          <textarea id="rejectOrgReasonInput" rows="3" class="form-control"
+            placeholder="Ví dụ: Thiếu giấy phép thành lập hoặc quyết định công nhận ban đại diện..."></textarea>
         </div>
       </div>
       <div class="dash-modal-footer">
         <button class="btn btn-outline" onclick="closeModal('rejectOrgModal')">Hủy</button>
-        <button class="btn btn-primary" style="background: #ef4444; border-color: #ef4444;" onclick="submitRejectOrg()">Xác Nhận Từ Chối</button>
+        <button class="btn btn-primary" style="background: #ef4444; border-color: #ef4444;"
+          onclick="submitRejectOrg()">Xác Nhận Từ Chối</button>
       </div>
     </div>
   </div>
@@ -468,12 +513,14 @@
         <input type="hidden" id="rejectCampId" />
         <div class="dash-form-group">
           <label>Lý do từ chối hoặc hướng dẫn điều chỉnh:</label>
-          <textarea id="rejectCampReasonInput" rows="3" class="form-control" placeholder="Ví dụ: Địa điểm tổ chức chưa có phương án đảm bảo an toàn thời tiết..."></textarea>
+          <textarea id="rejectCampReasonInput" rows="3" class="form-control"
+            placeholder="Ví dụ: Địa điểm tổ chức chưa có phương án đảm bảo an toàn thời tiết..."></textarea>
         </div>
       </div>
       <div class="dash-modal-footer">
         <button class="btn btn-outline" onclick="closeModal('rejectCampModal')">Hủy</button>
-        <button class="btn btn-primary" style="background: #ef4444; border-color: #ef4444;" onclick="submitRejectCamp()">Gửi Phản Hồi</button>
+        <button class="btn btn-primary" style="background: #ef4444; border-color: #ef4444;"
+          onclick="submitRejectCamp()">Gửi Phản Hồi</button>
       </div>
     </div>
   </div>
@@ -489,12 +536,14 @@
         <input type="hidden" id="revokeCertId" />
         <div class="dash-form-group">
           <label>Lý do thu hồi (revoked_reason):</label>
-          <textarea id="revokeCertReasonInput" rows="3" class="form-control" placeholder="Ví dụ: Phát hiện gian lận mã điểm danh hoặc không có mặt tại sự kiện..."></textarea>
+          <textarea id="revokeCertReasonInput" rows="3" class="form-control"
+            placeholder="Ví dụ: Phát hiện gian lận mã điểm danh hoặc không có mặt tại sự kiện..."></textarea>
         </div>
       </div>
       <div class="dash-modal-footer">
         <button class="btn btn-outline" onclick="closeModal('revokeCertModal')">Hủy</button>
-        <button class="btn btn-primary" style="background: #ef4444; border-color: #ef4444;" onclick="submitRevokeCert()">Xác Nhận Thu Hồi</button>
+        <button class="btn btn-primary" style="background: #ef4444; border-color: #ef4444;"
+          onclick="submitRevokeCert()">Xác Nhận Thu Hồi</button>
       </div>
     </div>
   </div>
@@ -503,11 +552,12 @@
   <script src="https://cdn.jsdelivr.net/npm/axios@1.7.9/dist/axios.min.js"></script>
   <script src="../js/config.js"></script>
   <script src="../js/api.js"></script>
+  <script src="../js/notifications.js"></script>
   <script src="../js/data_store.js"></script>
   <script src="../js/utils.js"></script>
   <script src="../js/auth.js"></script>
   <script src="../js/admin_dashboard.js"></script>
 
 </body>
-</html>
 
+</html>

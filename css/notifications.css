@@ -1,0 +1,214 @@
+/* VolunteerLink - Notifications */
+
+.vl-notification-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    z-index: 10000;
+}
+
+.vl-notification-bell {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 42px;
+    height: 42px;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #ffffff;
+    font-size: 21px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.vl-notification-bell:hover {
+    background: #f1f5f9;
+}
+
+.vl-notification-badge {
+    position: absolute;
+    top: -5px;
+    right: -7px;
+    min-width: 19px;
+    height: 19px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: #dc2626;
+    color: white;
+    font-size: 11px;
+    font-weight: 700;
+    display: grid;
+    place-items: center;
+}
+
+.vl-notification-badge[hidden],
+.vl-notification-dropdown[hidden] {
+    display: none !important;
+}
+
+.vl-notification-dropdown {
+    position: absolute;
+    top: calc(100% + 12px);
+    right: 0;
+    width: min(380px, calc(100vw - 24px));
+    max-height: 500px;
+    overflow: hidden;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    box-shadow: 0 12px 35px rgba(15, 23, 42, 0.16);
+    z-index: 99999;
+    display: block;
+    visibility: visible;
+}
+
+.vl-notification-heading,
+.vl-notification-footer {
+    padding: 14px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.vl-notification-heading strong {
+    font-size: 16px;
+    color: #0f172a;
+}
+
+.vl-notification-read-all,
+.vl-notification-footer button {
+    border: none;
+    background: transparent;
+    color: #15803d;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.vl-notification-list {
+    max-height: 370px;
+    overflow-y: auto;
+}
+
+.vl-notification-item {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 14px 16px;
+    text-align: left;
+    background: #ffffff;
+    border: none;
+    border-bottom: 1px solid #f1f5f9;
+    cursor: pointer;
+}
+
+.vl-notification-item:hover {
+    background: #f8fafc;
+}
+
+.vl-notification-item.unread {
+    background: #ecfdf5;
+}
+
+.vl-notification-item-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.vl-unread-dot {
+    width: 8px;
+    height: 8px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: #16a34a;
+}
+
+.vl-notification-message {
+    color: #475569;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.vl-notification-time {
+    color: #94a3b8;
+    font-size: 11px;
+}
+
+.vl-notification-empty {
+    padding: 32px 16px;
+    text-align: center;
+    color: #64748b;
+    font-size: 13px;
+}
+
+.vl-notification-footer {
+    justify-content: center;
+    border-bottom: none;
+    border-top: 1px solid #e2e8f0;
+}
+
+.dash-header,
+.dash-header-actions,
+.admin-header-actions {
+    overflow: visible;
+}
+
+@media (max-width: 480px) {
+    .vl-notification-dropdown {
+        position: fixed;
+        top: 70px;
+        right: 12px;
+        left: 12px;
+        width: auto;
+    }
+}
+
+.vl-notification-footer {
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.vl-notification-view-all,
+.vl-notification-inbox > a {
+    color: #15803d;
+    font-weight: 600;
+}
+
+.vl-notification-inbox {
+    width: min(760px, calc(100% - 32px));
+    margin: clamp(20px, 6vw, 56px) auto;
+}
+
+.vl-notification-inbox h1 {
+    margin: 12px 0 20px;
+    font-size: clamp(24px, 5vw, 32px);
+}
+
+.vl-notification-panel {
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    background: #fff;
+    overflow: hidden;
+}
+
+.vl-notification-footer button:disabled {
+    cursor: default;
+    color: #64748b;
+    opacity: 0.65;
+}
+
+.vl-notification-item {
+    overflow-wrap: anywhere;
+}
+
+.vl-notification-target {
+    outline: 2px solid #15803d;
+    outline-offset: -2px;
+}
