@@ -123,10 +123,15 @@ loginForm.addEventListener("submit", async function (event) {
         console.log("Đăng nhập thành công từ Backend:", user);
         showToast(`Đăng nhập thành công! Xin chào ${user.full_name}`, "success");
 
-        // 7. Chuyển trang theo URL redirect hoặc Bảng điều khiển theo Role
+        // 7. Chuyển trang theo URL redirect nội bộ an toàn hoặc Bảng điều khiển theo Role
         const urlParams = new URLSearchParams(window.location.search);
         const redirectPage = urlParams.get("redirect");
-        const targetPage = redirectPage || Auth.getDashboard(user.role);
+        const isSafeRedirect =
+            redirectPage &&
+            !redirectPage.startsWith("//") &&
+            !/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(redirectPage) &&
+            !redirectPage.includes("\\");
+        const targetPage = isSafeRedirect ? redirectPage : Auth.getDashboard(user.role);
 
         setTimeout(() => {
             window.location.href = targetPage;

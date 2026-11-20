@@ -1,0 +1,268 @@
+/* ==========================================================================
+   Trang Tìm Kiếm & Lọc Chiến Dịch (campaign.html)
+   Tái sử dụng design tokens, khung-a*, campaign-card* từ style.css & home.css
+   ========================================================================== */
+
+.search-header-box {
+  margin-bottom: 26px;
+}
+
+.page-title-bar {
+  margin-bottom: 16px;
+}
+
+.page-title-bar h1 {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--text-main);
+  letter-spacing: -0.02em;
+  margin-bottom: 2px;
+}
+
+.page-title-bar p {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.search-toolbar {
+  display: flex;
+  align-items: center;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+  box-shadow: var(--shadow-sm);
+  gap: 6px;
+  transition: var(--transition);
+}
+
+.search-toolbar:focus-within {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.14);
+}
+
+.search-input-box {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  min-width: 200px;
+}
+
+.search-icon {
+  color: var(--text-light);
+}
+
+.search-input-box input {
+  width: 100%;
+  border: none;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+  padding: 9px 0;
+  font-size: 0.92rem;
+  color: var(--text-main);
+}
+
+.search-input-box input:focus {
+  border: none;
+  outline: none;
+  box-shadow: none;
+}
+
+.search-input-box input::placeholder {
+  color: var(--text-light);
+}
+
+.search-divider {
+  width: 1px;
+  height: 26px;
+  background-color: var(--border);
+  flex-shrink: 0;
+}
+
+/* ---------- Dropdown Lĩnh vực (Unified vl-select) ---------- */
+#filter-category.vl-select {
+  min-width: 195px;
+  height: 40px;
+  padding: 0 34px 0 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background-color: transparent;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-main);
+  transition: var(--transition);
+}
+
+#filter-category.vl-select:hover {
+  background-color: var(--surface-alt);
+}
+
+#filter-category.vl-select:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  background-color: var(--surface);
+}
+
+.search-submit-btn {
+  padding: 10px 22px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+/* ---------- Danh Sách Chiến Dịch & Nút Phân Trang Nổi ---------- */
+.campaign-list-section {
+  position: relative;
+}
+
+.campaign-grid-wrapper {
+  position: relative;
+}
+
+.campaign-list-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.campaign-list-grid .campaign-card-img {
+  height: 165px;
+}
+
+.campaign-list-grid .campaign-card-body {
+  padding: 16px;
+}
+
+.campaign-list-grid .campaign-card-title {
+  font-size: 1.05rem;
+}
+
+.campaign-empty-title {
+  display: block;
+  font-size: 1.05rem;
+  color: var(--text-main);
+  margin-bottom: 6px;
+}
+
+.floating-page-btn {
+  position: absolute;
+  top: 50%;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background-color: #FFFFFF;
+  border: 1px solid var(--border);
+  color: var(--text-main);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.14);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 50;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-50%) scale(0.85);
+  transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.25s ease, background-color 0.2s ease;
+}
+
+.floating-page-prev {
+  left: -22px;
+}
+
+.floating-page-next {
+  right: -22px;
+}
+
+.campaign-grid-wrapper.show-page-nav .floating-page-btn {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(-50%) scale(1);
+}
+
+.floating-page-btn:hover:not(:disabled) {
+  background-color: var(--primary);
+  color: #FFFFFF;
+  border-color: var(--primary);
+  box-shadow: 0 6px 18px rgba(30, 126, 85, 0.3);
+  transform: translateY(-50%) scale(1.08) !important;
+}
+
+.floating-page-btn:disabled {
+  opacity: 0.4 !important;
+  cursor: not-allowed;
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 1024px) {
+  .campaign-list-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .search-toolbar {
+    flex-wrap: wrap;
+    padding: 10px;
+  }
+
+  .search-input-box {
+    width: 100%;
+    flex: 1 1 100%;
+    border-bottom: 1px solid var(--border-light);
+    padding-bottom: 6px;
+  }
+
+  .search-divider {
+    display: none;
+  }
+
+  #filter-category.vl-select {
+    flex: 1;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+}
+
+@media (max-width: 768px) {
+  .search-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  #filter-category.vl-select,
+  .search-submit-btn {
+    width: 100%;
+  }
+
+  .campaign-list-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .floating-page-btn {
+    position: fixed;
+    top: auto;
+    bottom: 24px;
+    transform: scale(0.85);
+  }
+
+  .campaign-grid-wrapper.show-page-nav .floating-page-btn {
+    transform: scale(1);
+  }
+
+  .floating-page-btn:hover:not(:disabled) {
+    transform: scale(1.08) !important;
+  }
+
+  .floating-page-prev {
+    left: 16px;
+  }
+
+  .floating-page-next {
+    right: 16px;
+  }
+}

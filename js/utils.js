@@ -54,8 +54,102 @@ function showToast(message, type = "success") {
 
   setTimeout(() => {
     toast.style.opacity = "0";
-    toast.style.transform = "translateY(8px)";
+    toast.style.transform = "translateY(-8px)";
     toast.style.transition = "all 0.25s cubic-bezier(0.16, 1, 0.3, 1)";
     setTimeout(() => toast.remove(), 250);
   }, 3500);
+}
+
+function resolveBackendAssetUrl(url) {
+  const raw = String(url || "").trim();
+  if (!raw) return null;
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (raw.startsWith("/uploads/")) {
+    const base = (typeof CONFIG !== "undefined" && CONFIG.API_BASE_URL ? CONFIG.API_BASE_URL : "")
+      .replace(/\/api\/?$/, "");
+    return base + raw;
+  }
+  return null;
+}
+
+function renderAvatarElement(containerEl, avatarUrl, fallbackText = "U") {
+  if (!containerEl) return;
+  const letter = String(fallbackText || "U").trim().charAt(0).toUpperCase() || "U";
+  const resolved = resolveBackendAssetUrl(avatarUrl);
+  containerEl.textContent = "";
+  if (!resolved) {
+    containerEl.textContent = letter;
+    return;
+  }
+  const img = document.createElement("img");
+  img.src = resolved;
+  img.alt = "";
+  img.addEventListener("error", () => {
+    containerEl.textContent = letter;
+  });
+  containerEl.appendChild(img);
+}
+
+async function uploadAvatarFile(file) {
+  const allowed = ["image/jpeg", "image/png", "image/webp"];
+  if (!file) return null;
+  if (!allowed.includes((file.type || "").toLowerCase())) {
+    throw new Error("Chỉ hỗ trợ ảnh định dạng JPG, PNG hoặc WEBP.");
+  }
+  if (file.size > 2 * 1024 * 1024) {
+    throw new Error("Kích thước ảnh tối đa là 2MB.");
+  }
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await api.post("/profile/avatar", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return res.data;
+}
+
+function openAvatarPreviewModal(avatarUrl, displayName = "Ảnh đại diện") {
+  const resolved = resolveBackendAssetUrl(avatarUrl);
+  if (!resolved) {
+    if (typeof showToast === "function") {
+      showToast("Bạn chưa có ảnh đại diện.", "info");
+    }
+    return;
+  }
+
+  let modal = document.getElementById("avatarPreviewModal");
+  if (!modal) {
+    modal = document.createElement("div");
+    modal.id = "avatarPreviewModal";
+    modal.className = "dash-modal-backdrop";
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    modal.setAttribute("aria-labelledby", "avatarPreviewModalTitle");
+    modal.innerHTML = `
+      <div class="dash-modal" style="max-width: 440px;">
+        <div class="dash-modal-header">
+          <h3 id="avatarPreviewModalTitle">Ảnh đại diện</h3>
+          <button type="button" class="dash-modal-close" aria-label="Đóng hộp thoại">&times;</button>
+        </div>
+        <div class="dash-modal-body" style="padding: 16px;">
+          <img id="avatarPreviewModalImg" class="ud-avatar-lightbox-img" alt="Ảnh đại diện">
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    const close = () => modal.classList.remove("open");
+    modal.querySelector(".dash-modal-close")?.addEventListener("click", close);
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) close();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && modal.classList.contains("open")) close();
+    });
+  }
+
+  const titleEl = modal.querySelector("#avatarPreviewModalTitle");
+  const imgEl = modal.querySelector("#avatarPreviewModalImg");
+  if (titleEl) titleEl.textContent = displayName ? `Ảnh đại diện — ${displayName}` : "Ảnh đại diện";
+  if (imgEl) imgEl.src = resolved;
+  modal.classList.add("open");
 }

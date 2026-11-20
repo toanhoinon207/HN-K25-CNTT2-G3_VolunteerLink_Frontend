@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chi Tiết Chiến Dịch - VolunteerLink</title>
+  <link rel="icon" type="image/svg+xml" href="../assets/images/logo.svg">
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/home.css">
+  <link rel="stylesheet" href="../css/campaign_detail.css">
+  <link rel="stylesheet" href="../css/responsive.css">
+</head>
+<body class="khung-a">
+
+  <header id="app-header" class="khung-a-header"></header>
+
+  <main class="khung-a-main">
+    <nav class="breadcrumb">
+      <a href="home.html">Trang chủ</a>
+      <span>/</span>
+      <a href="campaign.html">Chiến dịch</a>
+      <span>/</span>
+      <span class="breadcrumb-current" id="breadcrumb-title">Chi tiết chiến dịch</span>
+    </nav>
+
+    <div id="detail-status-box" style="display: none;"></div>
+
+    <div id="detail-content" class="detail-layout">
+      <!-- Cột Trái: Thông Tin Chi Tiết Chiến Dịch (GET /api/campaigns/{campaign_id}) -->
+      <article class="detail-main-card">
+        <img
+          id="detail-banner"
+          class="detail-banner"
+          src="../assets/images/logo.svg"
+          alt=""
+        >
+        <div class="detail-body">
+          <div class="detail-badges">
+            <span id="detail-category" class="badge badge-primary"></span>
+            <span id="detail-status" class="badge"></span>
+          </div>
+
+          <h1 id="detail-title" class="detail-title"></h1>
+
+          <div class="detail-info-grid">
+            <div class="detail-info-item">
+              <span class="detail-info-label">🏢 Tổ chức thực hiện</span>
+              <span id="detail-organization" class="detail-info-value"></span>
+            </div>
+            <div class="detail-info-item">
+              <span class="detail-info-label">📍 Địa điểm</span>
+              <span id="detail-location" class="detail-info-value"></span>
+            </div>
+            <div class="detail-info-item">
+              <span class="detail-info-label">📅 Thời gian bắt đầu</span>
+              <span id="detail-start-time" class="detail-info-value"></span>
+            </div>
+            <div class="detail-info-item">
+              <span class="detail-info-label">🏁 Thời gian kết thúc</span>
+              <span id="detail-end-time" class="detail-info-value"></span>
+            </div>
+            <div class="detail-info-item">
+              <span class="detail-info-label">⏳ Hạn chót đăng ký</span>
+              <span id="detail-deadline" class="detail-info-value"></span>
+            </div>
+            <div class="detail-info-item">
+              <span class="detail-info-label">⏱️ Số giờ dự kiến</span>
+              <span id="detail-hours" class="detail-info-value"></span>
+            </div>
+          </div>
+
+          <div class="detail-section">
+            <h2>Mô tả chiến dịch</h2>
+            <div id="detail-description" class="detail-text"></div>
+          </div>
+
+          <div class="detail-section">
+            <h2>Yêu cầu đối với tình nguyện viên</h2>
+            <div id="detail-requirements" class="detail-text"></div>
+          </div>
+        </div>
+      </article>
+
+      <!-- Cột Phải: Nút Đăng Ký Tham Gia (POST /api/registrations/) -->
+      <aside class="detail-sidebar">
+        <div class="registration-card">
+          <h3>Tham Gia Chiến Dịch</h3>
+
+          <div class="slot-box">
+            <div class="slot-row">
+              <span>Còn trống: <strong id="detail-remaining-slots" class="slot-remaining">0</strong> chỗ</span>
+              <span id="detail-approved-ratio">Đã duyệt: 0/0</span>
+            </div>
+            <div class="progress-bar">
+              <div id="detail-progress-fill" class="progress-fill" style="width: 0%;"></div>
+            </div>
+          </div>
+
+          <ul class="reg-meta-list">
+            <li>📍 Địa điểm: <strong id="sidebar-location"></strong></li>
+            <li>⏳ Hạn đăng ký: <strong id="sidebar-deadline"></strong></li>
+          </ul>
+
+          <button type="button" id="btn-register-campaign" class="btn btn-primary btn-lg btn-block" disabled>
+            Đăng ký tham gia
+          </button>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <footer id="app-footer" class="khung-a-footer"></footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/axios@1.7.9/dist/axios.min.js"></script>
+  <script src="../js/config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/utils.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/layout.js"></script>
+  <script src="../js/campaign_detail.js"></script>
+</body>
+</html>
