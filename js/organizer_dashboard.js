@@ -22,7 +22,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   currentUser = await Auth.requireAuth(["ORGANIZER"]);
   if (!currentUser) return;
 
-  // 2. Tìm thông tin tổ chức sở hữu & danh sách chiến dịch từ DB
+  // 2. Tìm thông tin tổ chức sở hữu (từ DB)
   await loadCurrentOrganization();
   await loadOrganizerCampaigns();
 
@@ -36,8 +36,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     Layout.initNotificationBell(currentUser.role || "ORGANIZER");
   }
   setupMobileMenu();
-  setupCampaignImagePreview();
-  setupOverviewFilters();
 
   // 5. Nạp dữ liệu các thành phần
   renderOverview();
@@ -45,6 +43,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   renderCampaignsTable();
   setupAttendanceGenerator();
   renderVolunteerApplicants();
+  renderWaitlist();
   renderCertificatesAndClaims();
   setupOrgProfileForm();
 
@@ -1254,16 +1253,10 @@ function setupAttendanceGenerator() {
   const genBtn = document.getElementById("btnGenerateAttendanceCode");
   if (!select) return;
 
-  const openCampaigns = getOrgCampaigns().filter(c => c.status === "OPEN");
-  if (openCampaigns.length === 0) {
-    select.innerHTML = `<option value="">Chưa có chiến dịch đang mở (OPEN)</option>`;
-    if (genBtn) genBtn.disabled = true;
-  } else {
-    select.innerHTML = openCampaigns.map(c =>
-      `<option value="${c.id}">${escapeHtml(c.title)}</option>`
-    ).join("");
-    if (genBtn) genBtn.disabled = false;
-  }
+  const allCampaigns = DataStore.getCampaigns().filter(c => c.organization_id === currentOrg.id || c.organization_name === currentOrg.name);
+  select.innerHTML = allCampaigns.map(c => 
+    `<option value="${c.id}">${escapeHtml(c.title)} (${c.status})</option>`
+  ).join("");
 
   // Khi đổi chiến dịch → reload danh sách điểm danh từ DB
   select.addEventListener("change", () => renderLiveAttendanceList());
@@ -1914,8 +1907,6 @@ async function loadCampaignWaitlist() {
 }
 
 // ================= TAB 5: CẤP CHỨNG CHỈ & KHIẾU NẠI GIỜ =================
-let eligibleRecipientsCache = [];
-
 async function renderCertificatesAndClaims() {
   const orgClaimsTbody = document.getElementById("orgClaimsTbody");
   const orgIssuedCertsTbody = document.getElementById("orgIssuedCertsTbody");
@@ -1966,19 +1957,16 @@ async function renderCertificatesAndClaims() {
     }
   }
 
-  // 2. Nạp danh sách chứng chỉ đã phát hành từ Backend (fallback DataStore)
-  let certs = [];
-  try {
-    const res = await api.get("/certificates/issued");
-    if (Array.isArray(res.data)) {
-      certs = res.data;
-    }
-  } catch (err) {
-    console.warn("Không thể tải /certificates/issued, dùng DataStore:", err);
-    certs = DataStore.getCertificates() || [];
-  }
-
+  // Render Certificates
+  const certs = DataStore.getCertificates();
   if (orgIssuedCertsTbody) {
+    let certs;
+    try {
+      certs = (await api.get("/certificates/issued")).data;
+    } catch {
+      orgIssuedCertsTbody.innerHTML = '<tr><td colspan="4">Không thể tải chứng nhận.</td></tr>';
+      return;
+    }
     if (certs.length === 0) {
       orgIssuedCertsTbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #94a3b8; padding: 20px;">Chưa phát hành chứng chỉ nào</td></tr>`;
     } else {
@@ -2066,80 +2054,28 @@ async function confirmRejectHourClaim() {
   }
 }
 
-async function openIssueCertModal() {
+function openIssueCertModal() {
   const campSelect = document.getElementById("certCampaignSelect");
   const volSelect = document.getElementById("certVolunteerSelect");
 
-  try {
-    const res = await api.get("/certificates/eligible");
-    if (Array.isArray(res.data)) {
-      eligibleRecipientsCache = res.data;
-    }
-  } catch (err) {
-    console.warn("Không thể tải /certificates/eligible, dùng danh sách cục bộ:", err);
-    eligibleRecipientsCache = [];
-  }
+  const myCampaigns = DataStore.getCampaigns().filter(c => c.organization_id === currentOrg.id || c.organization_name === currentOrg.name);
+  const myUsers = DataStore.getUsers().filter(u => u.role === "USER");
 
-  if (eligibleRecipientsCache.length > 0) {
-    const uniqueCampaigns = [];
-    const seenCampIds = new Set();
-    eligibleRecipientsCache.forEach(item => {
-      if (!seenCampIds.has(item.campaign_id)) {
-        seenCampIds.add(item.campaign_id);
-        uniqueCampaigns.push({ id: item.campaign_id, title: item.campaign_title });
-      }
-    });
-
-    campSelect.innerHTML = uniqueCampaigns.map(c => `<option value="${c.id}">${escapeHtml(c.title)}</option>`).join("");
-    const syncEligibleVolunteers = () => {
-      const selectedCampId = parseInt(campSelect.value, 10);
-      const vols = eligibleRecipientsCache.filter(item => item.campaign_id === selectedCampId);
-      volSelect.innerHTML = vols.map(v => `<option value="${v.user_id}">${escapeHtml(v.user_name || `TNV #${v.user_id}`)}</option>`).join("");
-    };
-    campSelect.onchange = syncEligibleVolunteers;
-    syncEligibleVolunteers();
-  } else {
-    const myCampaigns = getOrgCampaigns();
-    const myUsers = DataStore.getUsers().filter(u => u.role === "USER");
-    campSelect.onchange = null;
-    campSelect.innerHTML = myCampaigns.map(c => `<option value="${c.id}">${escapeHtml(c.title)}</option>`).join("");
-    volSelect.innerHTML = myUsers.map(u => `<option value="${u.id}">${escapeHtml(u.full_name)} (${u.email})</option>`).join("");
-  }
+  campSelect.innerHTML = myCampaigns.map(c => `<option value="${c.id}">${escapeHtml(c.title)}</option>`).join("");
+  volSelect.innerHTML = myUsers.map(u => `<option value="${u.id}">${escapeHtml(u.full_name)} (${u.email})</option>`).join("");
 
   openModal("issueCertModal");
 }
 
-async function submitIssueCertificate() {
+function submitIssueCertificate() {
   const campSelect = document.getElementById("certCampaignSelect");
   const volSelect = document.getElementById("certVolunteerSelect");
   const hours = parseFloat(document.getElementById("certHoursInput").value);
 
-  const campaignId = parseInt(campSelect.value, 10);
-  const userId = parseInt(volSelect.value, 10);
-  if (!campaignId || !userId || !hours || hours <= 0) {
-    showToast("Vui lòng chọn chiến dịch, tình nguyện viên và số giờ hợp lệ.", "warning");
-    return;
-  }
+  const campaignId = parseInt(campSelect.value);
+  const userId = parseInt(volSelect.value);
+  const camp = DataStore.getCampaigns().find(c => c.id === campaignId);
 
-  try {
-    const res = await api.post("/certificates", {
-      campaign_id: campaignId,
-      user_id: userId,
-      total_hours: hours
-    });
-    closeModal("issueCertModal");
-    showToast(`Đã phát hành chứng chỉ: ${res.data?.certificate_code || "Thành công"}`, "success");
-    await renderCertificatesAndClaims();
-    return;
-  } catch (err) {
-    if (err?.response?.status && err.response.status < 500) {
-      showToast(err.response?.data?.detail || "Không thể cấp chứng chỉ.", "error");
-      return;
-    }
-    console.warn("Fallback DataStore cho submitIssueCertificate:", err);
-  }
-
-  const camp = getOrgCampaigns().find(c => c.id === campaignId);
   const certs = DataStore.getCertificates();
   const certNumber = Math.floor(1000 + Math.random() * 9000);
   const newCert = {
@@ -2158,7 +2094,7 @@ async function submitIssueCertificate() {
   DataStore.set(DataStore.STORAGE_KEYS.CERTIFICATES, certs);
 
   closeModal("issueCertModal");
-  showToast(`Đã phát hành chứng chỉ (cục bộ): ${newCert.certificate_code}`, "success");
+  showToast(`Đã phát hành chứng chỉ: ${newCert.certificate_code}`, "success");
   renderCertificatesAndClaims();
 }
 
