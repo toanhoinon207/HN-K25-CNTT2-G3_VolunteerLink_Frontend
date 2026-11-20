@@ -99,7 +99,7 @@ const Auth = {
                 return prefix + "admin-dashboard.html";
 
             default:
-                return inPages ? "index.html" : "pages/index.html";
+                return inPages ? "home.html" : "pages/home.html";
         }
     },
 

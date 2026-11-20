@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tìm Kiếm Chiến Dịch - VolunteerLink</title>
+  <link rel="icon" type="image/svg+xml" href="../assets/images/logo.svg">
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/home.css">
+  <link rel="stylesheet" href="../css/campaign.css">
+  <link rel="stylesheet" href="../css/responsive.css">
+</head>
+<body class="khung-a">
+
+  <header id="app-header" class="khung-a-header"></header>
+
+  <main class="khung-a-main">
+    <!-- Thanh tiêu đề + Tìm kiếm & Lọc theo chuẩn API Backend (keyword & category) -->
+    <section class="search-header-box">
+      <div class="page-title-bar">
+        <h1>Khám Phá Chiến Dịch Tình Nguyện</h1>
+      </div>
+
+      <form id="campaign-filter-form" class="search-toolbar">
+        <div class="search-input-box">
+          <svg class="svg-icon search-icon" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input
+            type="search"
+            id="filter-keyword"
+            placeholder="Tìm theo tên chiến dịch..."
+          >
+        </div>
+
+        <div class="search-divider"></div>
+
+        <!-- Dropdown: Lĩnh vực (category lấy động từ DB) -->
+        <select id="filter-category" class="vl-select" aria-label="Lĩnh vực">
+          <option value="">Tất cả lĩnh vực</option>
+        </select>
+
+        <button type="submit" class="btn btn-primary search-submit-btn">
+          Tìm kiếm
+        </button>
+      </form>
+    </section>
+
+    <!-- Danh Sách Chiến Dịch (Bố cục 2 hàng x 3 cột lấy từ GET /api/campaigns) -->
+    <section class="campaign-list-section">
+      <div class="campaign-grid-wrapper" id="campaign-grid-wrapper">
+        <button
+          type="button"
+          id="btn-page-prev"
+          class="floating-page-btn floating-page-prev"
+          aria-label="Trang trước"
+          disabled
+        >
+          <svg class="svg-icon" viewBox="0 0 24 24">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+        </button>
+
+        <div class="campaign-list-grid" id="campaign-list-container"></div>
+
+        <button
+          type="button"
+          id="btn-page-next"
+          class="floating-page-btn floating-page-next"
+          aria-label="Trang tiếp theo"
+          disabled
+        >
+          <svg class="svg-icon" viewBox="0 0 24 24">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </button>
+      </div>
+    </section>
+
+    <!-- Template dùng chung cho thẻ chiến dịch -->
+    <template id="campaign-card-template">
+      <article class="campaign-card">
+        <img src="" alt="" class="campaign-card-img">
+        <div class="campaign-card-body">
+          <div class="campaign-card-badges">
+            <span class="badge badge-primary card-category"></span>
+            <span class="badge card-status"></span>
+          </div>
+          <h3 class="campaign-card-title">
+            <a href="" class="card-title-link"></a>
+          </h3>
+          <p class="campaign-card-desc"></p>
+          <div class="campaign-card-info">
+            <div>📍 <strong>Địa điểm:</strong> <span class="card-location"></span></div>
+            <div>🏢 <strong>Tổ chức:</strong> <span class="card-org"></span></div>
+          </div>
+          <a href="" class="btn btn-primary btn-block card-detail-btn">Xem chi tiết</a>
+        </div>
+      </article>
+    </template>
+  </main>
+
+  <footer id="app-footer" class="khung-a-footer"></footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/axios@1.7.9/dist/axios.min.js"></script>
+  <script src="../js/config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/utils.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/layout.js"></script>
+  <script src="../js/campaign.js"></script>
+</body>
+</html>

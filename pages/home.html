@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VolunteerLink - Cổng Kết Nối Tình Nguyện Viên &amp; Hoạt Động Cộng Đồng</title>
+  <link rel="icon" type="image/svg+xml" href="../assets/images/logo.svg">
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/home.css">
+  <link rel="stylesheet" href="../css/responsive.css">
+</head>
+<body class="khung-a">
+
+  <header id="app-header" class="khung-a-header"></header>
+
+  <main class="khung-a-main">
+    <!-- Hero Banner -->
+    <section class="hero-banner">
+      <span class="badge hero-badge">
+        <svg class="svg-icon svg-icon-xs" viewBox="0 0 24 24">
+          <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>
+        </svg>
+        Kết Nối Tình Nguyện Viên &amp; Hoạt Động Cộng Đồng
+      </span>
+      <h1>Ghép Đúng Người - Trao Đúng Việc - Lan Tỏa Yêu Thương</h1>
+      <p>
+        Nền tảng kết nối tình nguyện viên với các tổ chức xã hội dựa trên kỹ năng, lịch rảnh và nhu cầu nhân lực thực tế của từng chiến dịch.
+      </p>
+    </section>
+
+    <!-- Thống kê -->
+    <section class="stats-row">
+      <div class="grid-4">
+        <div class="stat-card">
+          <div class="stat-icon">
+            <svg class="svg-icon" viewBox="0 0 24 24">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+          </div>
+          <div>
+            <div class="stat-value">1,250+</div>
+            <div class="stat-label">Tình nguyện viên</div>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon stat-icon--accent">
+            <svg class="svg-icon" viewBox="0 0 24 24">
+              <rect x="4" y="2" width="16" height="20" rx="2" ry="2"/>
+              <path d="M9 22v-4h6v4"/>
+              <path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/>
+              <path d="M12 10h.01"/><path d="M12 14h.01"/>
+              <path d="M16 10h.01"/><path d="M16 14h.01"/>
+            </svg>
+          </div>
+          <div>
+            <div class="stat-value">48+</div>
+            <div class="stat-label">Tổ chức xã hội</div>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon stat-icon--info">
+            <svg class="svg-icon" viewBox="0 0 24 24">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+              <line x1="16" y1="2" x2="16" y2="6"/>
+              <line x1="8" y1="2" x2="8" y2="6"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+          </div>
+          <div>
+            <div class="stat-value">350+</div>
+            <div class="stat-label">Chiến dịch hoạt động</div>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon stat-icon--ai">
+            <svg class="svg-icon" viewBox="0 0 24 24">
+              <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>
+            </svg>
+          </div>
+          <div>
+            <div class="stat-value">94.8%</div>
+            <div class="stat-label">Tỷ lệ kết nối thành công</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Chiến Dịch Cộng Đồng Nổi Bật (GET /api/campaigns/featured) -->
+    <section class="campaign-section" id="featuredSection">
+      <div class="section-header">
+        <div>
+          <h2>Chiến Dịch Cộng Đồng Nổi Bật</h2>
+          <p>Các dự án đang thu hút nhiều lượt đăng ký và cần hỗ trợ nhân lực gấp</p>
+        </div>
+        <a href="campaign.html" class="btn btn-outline-primary btn-sm">Xem tất cả ➔</a>
+      </div>
+
+      <div class="grid-3" id="featuredCampaignsContainer"></div>
+    </section>
+
+    <!-- Chiến Dịch Sắp Diễn Ra (GET /api/campaigns?page=1&page_size=6) -->
+    <section class="campaign-section" id="upcomingSection">
+      <div class="section-header">
+        <div>
+          <h2>Chiến Dịch Sắp Diễn Ra</h2>
+          <p>Các hoạt động tình nguyện đang triển khai trên hệ thống</p>
+        </div>
+        <a href="campaign.html" class="btn btn-outline-primary btn-sm">Xem tất cả ➔</a>
+      </div>
+
+      <div class="grid-3" id="upcomingCampaignsContainer"></div>
+    </section>
+
+    <!-- Template dùng chung cho thẻ chiến dịch trên trang chủ -->
+    <template id="campaign-card-template">
+      <article class="campaign-card">
+        <img src="" alt="" class="campaign-card-img">
+        <div class="campaign-card-body">
+          <div class="campaign-card-badges">
+            <span class="badge badge-primary card-category"></span>
+            <span class="badge card-status"></span>
+          </div>
+          <h3 class="campaign-card-title">
+            <a href="" class="card-title-link"></a>
+          </h3>
+          <p class="campaign-card-desc"></p>
+          <div class="campaign-card-info">
+            <div>📍 <strong>Địa điểm:</strong> <span class="card-location"></span></div>
+            <div>🏢 <strong>Tổ chức:</strong> <span class="card-org"></span></div>
+          </div>
+          <a href="" class="btn btn-primary btn-block card-detail-btn">Xem chi tiết</a>
+        </div>
+      </article>
+    </template>
+  </main>
+
+  <footer id="app-footer" class="khung-a-footer"></footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/axios@1.7.9/dist/axios.min.js"></script>
+  <script src="../js/config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/utils.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/layout.js"></script>
+  <script src="../js/home.js"></script>
+</body>
+</html>

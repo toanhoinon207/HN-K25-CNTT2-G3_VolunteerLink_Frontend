@@ -1,566 +1,749 @@
 /**
- * Logic điều khiển Bảng điều khiển Quản trị viên (Role: ADMIN)
- * Tích hợp Backend API: /auth/me, /api/health, DataStore
+ * Trung tâm Điều hành Quản trị (Role: ADMIN)
+ * Kết nối Backend FastAPI:
+ *   - Health: GET /api/health
+ *   - Organizations: GET /api/admin/organizations, PATCH /api/admin/organizations/{id}/review
+ *   - Campaigns: GET /api/admin/campaigns/pending, GET /api/campaigns, PATCH /api/admin/campaigns/{id}/review
+ *   - Users: GET /api/admin/users, PATCH /api/admin/users/{id}/status, PATCH /api/admin/users/{id}/role
+ *   - Certificates: GET /api/admin/certificates, PATCH /api/admin/certificates/{id}/revoke
+ *   - Notifications: Layout.initNotificationBell("ADMIN")
  */
 
 let currentUser = null;
+let allOrganizations = [];
+let allCampaigns = [];
+let allUsers = [];
+let allCertificates = [];
+
+const ORG_STATUS_MAP = {
+  PENDING: { label: "Chờ duyệt", cls: "status-pending" },
+  APPROVED: { label: "Đã duyệt", cls: "status-approved" },
+  REJECTED: { label: "Bị từ chối", cls: "status-rejected" },
+};
+
+const CAMP_STATUS_MAP = {
+  PENDING: { label: "Chờ duyệt", cls: "status-pending" },
+  OPEN: { label: "Đang mở", cls: "status-approved" },
+  CLOSED: { label: "Đã đóng", cls: "status-closed" },
+  COMPLETED: { label: "Hoàn thành", cls: "status-approved" },
+  REJECTED: { label: "Bị từ chối", cls: "status-rejected" },
+  CANCELLED: { label: "Đã hủy", cls: "status-closed" },
+};
+
+function extractApiError(error, fallback = "Đã xảy ra lỗi khi kết nối máy chủ.") {
+  const detail = error?.response?.data?.detail;
+  if (typeof detail === "string" && detail.trim()) return detail;
+  if (Array.isArray(detail) && detail.length > 0) {
+    return detail.map((item) => item.msg || "Dữ liệu không hợp lệ").join("; ");
+  }
+  if (!error?.response) return "Không thể kết nối tới Backend.";
+  return fallback;
+}
+
+function formatDateVN(value) {
+  if (!value) return "--";
+  const d = new Date(value);
+  return isNaN(d.getTime()) ? "--" : d.toLocaleDateString("vi-VN");
+}
+
+function isSafeHttpUrl(url) {
+  return /^https?:\/\//i.test(String(url || "").trim());
+}
+
+/* ==================== KHỞI TẠO ==================== */
 
 document.addEventListener("DOMContentLoaded", async () => {
-  // 1. Kiểm tra xác thực & vai trò ADMIN
   currentUser = await Auth.requireAuth(["ADMIN"]);
   if (!currentUser) return;
 
-  // 2. Thiết lập Header
   setupAdminHeader();
-
-  // 3. Khởi tạo Tabs & Mobile menu
   setupTabs();
-  setupMobileMenu();
+  setupUserMenu();
+  if (typeof Layout !== "undefined" && typeof Layout.initNotificationBell === "function") {
+    Layout.initNotificationBell("ADMIN");
+  }
 
-  // 4. Nạp dữ liệu các module
-  renderSystemOverview();
-  renderOrganizationsTable();
-  renderCampaignsTable();
-  renderUsersTable();
-  renderCertificatesTable();
+  const logoutBtn = document.getElementById("logoutBtn");
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", async () => {
+      try {
+        await api.post("/auth/logout");
+      } catch {
+        // Vẫn xóa session cục bộ nếu token đã hết hạn
+      }
+      Auth.logout();
+    });
+  }
 
-  // 5. Đăng xuất
-  document.getElementById("logoutBtn").addEventListener("click", () => {
-    Auth.logout();
-  });
+  await refreshAllAdminData();
 });
 
-function setupAdminHeader() {
-  const fullName = currentUser.full_name || currentUser.name || "Quản trị viên";
-  const firstLetter = fullName.trim().charAt(0).toUpperCase();
+async function refreshAllAdminData() {
+  await Promise.allSettled([
+    checkBackendHealth(false),
+    loadAdminOrganizations(),
+    loadAdminCampaigns(),
+    loadAdminUsers(),
+    loadAdminCertificates(),
+  ]);
+  renderOverviewStats();
+}
 
-  document.getElementById("headerUserName").textContent = fullName;
-  document.getElementById("headerAvatar").textContent = firstLetter;
+function setupAdminHeader() {
+  const fullName = currentUser.full_name || currentUser.name || currentUser.email || "Quản trị viên";
+  const nameEl = document.getElementById("headerUserName");
+  if (nameEl) nameEl.textContent = fullName;
+  if (typeof renderAvatarElement === "function") {
+    renderAvatarElement(document.getElementById("headerAvatar"), currentUser.avatar_url, fullName);
+  }
 }
 
 function setupTabs() {
-  const navItems = document.querySelectorAll(".dash-nav-item[data-tab]");
-  navItems.forEach(item => {
+  const navItems = Array.from(document.querySelectorAll(".dash-nav-item[data-tab]"));
+  navItems.forEach((item, index) => {
     item.addEventListener("click", (e) => {
       e.preventDefault();
-      const tabId = item.getAttribute("data-tab");
-      switchAdminTab(tabId);
+      switchAdminTab(item.getAttribute("data-tab"));
+    });
+    item.addEventListener("keydown", (e) => {
+      let nextIndex = null;
+      if (e.key === "ArrowDown" || e.key === "ArrowRight") nextIndex = (index + 1) % navItems.length;
+      else if (e.key === "ArrowUp" || e.key === "ArrowLeft") nextIndex = (index - 1 + navItems.length) % navItems.length;
+      else if (e.key === "Home") nextIndex = 0;
+      else if (e.key === "End") nextIndex = navItems.length - 1;
+      if (nextIndex !== null) {
+        e.preventDefault();
+        navItems[nextIndex].focus();
+        switchAdminTab(navItems[nextIndex].getAttribute("data-tab"));
+      }
     });
   });
+
+  const initialTab = new URLSearchParams(window.location.search).get("tab");
+  if (initialTab && document.getElementById("tab-" + initialTab)) {
+    switchAdminTab(initialTab);
+  }
 }
 
 function switchAdminTab(tabId) {
-  document.querySelectorAll(".dash-nav-item[data-tab]").forEach(nav => {
-    if (nav.getAttribute("data-tab") === tabId) {
-      nav.classList.add("active", "active-admin");
-    } else {
-      nav.classList.remove("active", "active-admin");
-    }
+  document.querySelectorAll(".dash-nav-item[data-tab]").forEach((nav) => {
+    const isSelected = nav.getAttribute("data-tab") === tabId;
+    nav.classList.toggle("active", isSelected);
+    nav.setAttribute("aria-selected", String(isSelected));
   });
 
-  document.querySelectorAll(".tab-panel").forEach(panel => {
-    panel.classList.remove("active");
+  document.querySelectorAll(".tab-panel").forEach((panel) => {
+    const isTarget = panel.id === "tab-" + tabId;
+    panel.classList.toggle("active", isTarget);
+    panel.hidden = !isTarget;
   });
-  const targetPanel = document.getElementById("tab-" + tabId);
-  if (targetPanel) {
-    targetPanel.classList.add("active");
-  }
 
-  const sidebar = document.getElementById("dashSidebar");
-  if (sidebar) sidebar.classList.remove("open");
-}
-
-function setupMobileMenu() {
-  const btn = document.getElementById("mobileMenuBtn");
-  const sidebar = document.getElementById("dashSidebar");
-  if (btn && sidebar) {
-    btn.addEventListener("click", () => {
-      sidebar.classList.toggle("open");
-    });
+  if (tabId && window.history?.replaceState) {
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", tabId);
+    window.history.replaceState(null, "", url.toString());
   }
 }
 
-// ================= TAB 1: SYSTEM OVERVIEW =================
-function renderSystemOverview() {
-  const users = DataStore.getUsers();
-  const orgs = DataStore.getOrganizations();
-  const camps = DataStore.getCampaigns();
+function setupUserMenu() {
+  const trigger = document.getElementById("userMenuBtn");
+  const menu = document.getElementById("userDropdownMenu");
+  const container = document.getElementById("userMenuContainer");
+  if (!trigger || !menu) return;
 
-  const pendingOrgs = orgs.filter(o => o.status === "PENDING");
-  const pendingCamps = camps.filter(c => c.status === "PENDING");
-  const openCamps = camps.filter(c => c.status === "OPEN");
-
-  document.getElementById("adminKpiUsers").textContent = users.length;
-  document.getElementById("adminKpiOrgs").textContent = orgs.length;
-  document.getElementById("adminKpiOrgsMeta").textContent = `${pendingOrgs.length} tổ chức đang chờ xét duyệt`;
-  document.getElementById("adminKpiCampaigns").textContent = openCamps.length;
-  document.getElementById("adminKpiPendingAll").textContent = pendingOrgs.length + pendingCamps.length;
-
-  document.getElementById("pendingOrgsBadge").textContent = pendingOrgs.length;
-  document.getElementById("pendingCampsBadge").textContent = pendingCamps.length;
-  document.getElementById("totalUsersBadge").textContent = users.length;
-
-  // Render quick pending queues
-  const quickOrgsTbody = document.getElementById("adminQuickPendingOrgsTbody");
-  if (quickOrgsTbody) {
-    if (pendingOrgs.length === 0) {
-      quickOrgsTbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: #94a3b8; padding: 18px;">Không có tổ chức nào chờ duyệt</td></tr>`;
-    } else {
-      quickOrgsTbody.innerHTML = pendingOrgs.slice(0, 3).map(o => `
-        <tr>
-          <td>
-            <div class="td-title">${escapeHtml(o.name)}</div>
-            <div class="td-subtitle">${escapeHtml(o.email)}</div>
-          </td>
-          <td style="font-size: 13px;">${formatDateTime(o.created_at)}</td>
-          <td style="text-align: right;">
-            <button class="btn-action btn-action-primary" onclick="approveOrganization(${o.id})">Duyệt</button>
-            <button class="btn-action btn-action-danger" onclick="openRejectOrgModal(${o.id})">Từ chối</button>
-          </td>
-        </tr>
-      `).join("");
-    }
-  }
-
-  const quickCampsTbody = document.getElementById("adminQuickPendingCampsTbody");
-  if (quickCampsTbody) {
-    if (pendingCamps.length === 0) {
-      quickCampsTbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: #94a3b8; padding: 18px;">Không có chiến dịch nào chờ duyệt</td></tr>`;
-    } else {
-      quickCampsTbody.innerHTML = pendingCamps.slice(0, 3).map(c => `
-        <tr>
-          <td>
-            <div class="td-title">${escapeHtml(c.title)}</div>
-            <div class="td-subtitle">${escapeHtml(c.organization_name || "Tổ chức")}</div>
-          </td>
-          <td><span class="status-pill status-open">${escapeHtml(c.category)}</span></td>
-          <td style="text-align: right;">
-            <button class="btn-action btn-action-primary" onclick="approveCampaign(${c.id})">Duyệt</button>
-            <button class="btn-action btn-action-danger" onclick="openRejectCampModal(${c.id})">Từ chối</button>
-          </td>
-        </tr>
-      `).join("");
-    }
-  }
-}
-
-// ================= TAB 2: KIỂM DUYỆT TỔ CHỨC =================
-function renderOrganizationsTable() {
-  const orgs = DataStore.getOrganizations();
-  const tbody = document.getElementById("adminOrgsTbody");
-  if (!tbody) return;
-
-  const statusMap = {
-    APPROVED: { label: "Đã phê duyệt", class: "status-approved" },
-    PENDING: { label: "Chờ phê duyệt", class: "status-pending" },
-    REJECTED: { label: "Bị từ chối", class: "status-rejected" }
+  const setOpen = (isOpen) => {
+    trigger.setAttribute("aria-expanded", String(isOpen));
+    menu.hidden = !isOpen;
   };
 
-  tbody.innerHTML = orgs.map(o => {
-    const st = statusMap[o.status] || { label: o.status, class: "status-draft" };
-    return `
-      <tr>
-        <td>
-          <div class="td-title">${escapeHtml(o.name)}</div>
-          <div class="td-subtitle">Mã: ORG-${o.id} · Đại diện: ${escapeHtml(o.owner_email || "—")}</div>
-        </td>
-        <td>
-          <div>${escapeHtml(o.email)}</div>
-          <div class="td-subtitle">${escapeHtml(o.phone)} · ${escapeHtml(o.address || "Hà Nội")}</div>
-        </td>
-        <td>
-          ${o.document_url ? `
-            <a href="${escapeHtml(o.document_url)}" target="_blank" style="color: #2563eb; font-weight: 600; font-size: 13px;">
-              📄 Giấy phép pháp lý ↗
-            </a>
-          ` : `<span style="color: #94a3b8; font-size: 13px;">Chưa nộp file</span>`}
-        </td>
-        <td>
-          <span class="status-pill ${st.class}">
-            <span class="status-dot"></span>
-            ${st.label}
-          </span>
-        </td>
-        <td style="max-width: 220px; font-size: 12.5px; color: #b91c1c;">
-          ${escapeHtml(o.rejection_reason || "—")}
-        </td>
-        <td style="text-align: right;">
-          <div class="btn-group-sm" style="justify-content: flex-end;">
-            ${o.status !== "APPROVED" ? `
-              <button class="btn-action btn-action-primary" onclick="approveOrganization(${o.id})">✓ Phê duyệt</button>
-            ` : ""}
-            ${o.status !== "REJECTED" ? `
-              <button class="btn-action btn-action-danger" onclick="openRejectOrgModal(${o.id})">✕ Từ chối</button>
-            ` : ""}
-          </div>
-        </td>
-      </tr>
-    `;
-  }).join("");
+  trigger.addEventListener("click", (e) => {
+    e.stopPropagation();
+    setOpen(menu.hidden);
+  });
+
+  document.addEventListener("click", (e) => {
+    if (container && !container.contains(e.target)) setOpen(false);
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") setOpen(false);
+  });
+}
+
+/* ==================== TỔNG QUAN & HEALTH ==================== */
+
+function renderOverviewStats() {
+  const pendingOrgs = allOrganizations.filter((o) => o.status === "PENDING");
+  const approvedOrgs = allOrganizations.filter((o) => o.status === "APPROVED");
+  const pendingCamps = allCampaigns.filter((c) => c.status === "PENDING");
+  const openCamps = allCampaigns.filter((c) => c.status === "OPEN");
+
+  const setText = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = String(val);
+  };
+
+  setText("statPendingOrgs", pendingOrgs.length);
+  setText("statPendingCamps", pendingCamps.length);
+  setText("statApprovedOrgs", approvedOrgs.length);
+  setText("statOpenCamps", openCamps.length);
+  setText("pendingOrgsBadge", pendingOrgs.length);
+  setText("pendingCampsBadge", pendingCamps.length);
+
+  const quickOrgsTbody = document.getElementById("quickPendingOrgsTbody");
+  if (quickOrgsTbody) {
+    if (pendingOrgs.length === 0) {
+      quickOrgsTbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:20px;">Không có hồ sơ tổ chức nào đang chờ duyệt.</td></tr>`;
+    } else {
+      quickOrgsTbody.innerHTML = pendingOrgs
+        .slice(0, 5)
+        .map(
+          (org) => `
+          <tr>
+            <td><strong>${escapeHtml(org.name)}</strong></td>
+            <td style="font-size:0.84rem;color:var(--text-muted);">${escapeHtml(org.email)}</td>
+            <td><button type="button" class="btn btn-outline btn-sm" onclick="openOrgDetailModal(${Number(org.id)})">Xem</button></td>
+            <td>
+              <div style="display:inline-flex;gap:6px;">
+                <button type="button" class="btn btn-primary btn-sm" onclick="approveOrganization(${Number(org.id)})">Duyệt</button>
+                <button type="button" class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="openRejectOrgModal(${Number(org.id)})">Từ chối</button>
+              </div>
+            </td>
+          </tr>
+        `
+        )
+        .join("");
+    }
+  }
+
+  const quickCampsTbody = document.getElementById("quickPendingCampsTbody");
+  if (quickCampsTbody) {
+    if (pendingCamps.length === 0) {
+      quickCampsTbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:20px;">Không có chiến dịch nào đang chờ duyệt.</td></tr>`;
+    } else {
+      quickCampsTbody.innerHTML = pendingCamps
+        .slice(0, 5)
+        .map(
+          (c) => `
+          <tr>
+            <td><strong>${escapeHtml(c.title)}</strong></td>
+            <td style="font-size:0.84rem;color:var(--text-muted);">${escapeHtml(c.organization?.name || `Org #${c.organization_id}`)}</td>
+            <td><a href="campaign_detail.html?id=${encodeURIComponent(c.id)}" class="btn btn-outline btn-sm">Chi tiết</a></td>
+            <td>
+              <div style="display:inline-flex;gap:6px;">
+                <button type="button" class="btn btn-primary btn-sm" onclick="approveCampaign(${Number(c.id)})">Duyệt</button>
+                <button type="button" class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="openRejectCampModal(${Number(c.id)})">Từ chối</button>
+              </div>
+            </td>
+          </tr>
+        `
+        )
+        .join("");
+    }
+  }
+}
+
+async function checkBackendHealth(showNotification = false) {
+  const pill = document.getElementById("overviewHealthPill");
+  const msgEl = document.getElementById("healthCheckMessage");
+  try {
+    const res = await api.get("/health");
+    const dbOk = res.data?.database === "connected" || res.status === 200;
+    if (pill) {
+      pill.className = `status-pill ${dbOk ? "status-approved" : "status-pending"}`;
+      pill.textContent = dbOk ? "API & MySQL: Hoạt động bình thường" : "API: Đang phản hồi";
+    }
+    if (msgEl) {
+      msgEl.textContent = `Trạng thái: ${res.data?.status || "ok"} | Database: ${res.data?.database || "connected"}`;
+    }
+    if (showNotification) showToast("Kết nối Backend & MySQL bình thường.", "success");
+  } catch (error) {
+    if (pill) {
+      pill.className = "status-pill status-rejected";
+      pill.textContent = "API: Mất kết nối";
+    }
+    if (msgEl) msgEl.textContent = extractApiError(error, "Không thể kết nối Backend.");
+    if (showNotification) showToast(extractApiError(error, "Không thể kết nối Backend."), "error");
+  }
+}
+
+/* ==================== TAB 2: TỔ CHỨC ==================== */
+
+async function loadAdminOrganizations() {
+  const tbody = document.getElementById("adminOrgsTbody");
+  try {
+    const res = await api.get("/admin/organizations");
+    allOrganizations = Array.isArray(res.data) ? res.data : [];
+    filterAdminOrgs();
+  } catch (error) {
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--danger);padding:20px;">${escapeHtml(extractApiError(error, "Không thể tải danh sách tổ chức."))}</td></tr>`;
+    }
+  }
 }
 
 function filterAdminOrgs() {
-  const query = document.getElementById("adminOrgSearch").value.toLowerCase();
-  const status = document.getElementById("adminOrgStatusFilter").value;
-  const rows = document.querySelectorAll("#adminOrgsTbody tr");
+  const q = (document.getElementById("orgSearchInput")?.value || "").trim().toLowerCase();
+  const statusVal = document.getElementById("orgStatusFilter")?.value || "ALL";
+  const tbody = document.getElementById("adminOrgsTbody");
+  if (!tbody) return;
 
-  rows.forEach(row => {
-    const text = row.textContent.toLowerCase();
-    const matchesQuery = !query || text.includes(query);
-    const matchesStatus = !status || text.includes(status.toLowerCase());
-    row.style.display = matchesQuery && matchesStatus ? "" : "none";
+  const filtered = allOrganizations.filter((org) => {
+    const matchStatus = statusVal === "ALL" || org.status === statusVal;
+    const matchText =
+      !q ||
+      (org.name || "").toLowerCase().includes(q) ||
+      (org.email || "").toLowerCase().includes(q);
+    return matchStatus && matchText;
   });
-}
 
-function approveOrganization(orgId) {
-  DataStore.updateOrgStatus(orgId, "APPROVED", null);
-
-  // Nâng cấp quyền người đại diện tổ chức thành ORGANIZER
-  const org = DataStore.getOrganizations().find(o => o.id === orgId);
-  if (org) {
-    const users = DataStore.getUsers();
-    const owner = users.find(u => u.id === org.owner_id || (org.owner_email && u.email.toLowerCase() === org.owner_email.toLowerCase()));
-    if (owner) {
-      owner.role = "ORGANIZER";
-      DataStore.set(DataStore.STORAGE_KEYS.USERS, users);
-
-      // Đồng bộ phiên đăng nhập nếu trùng tài khoản
-      const activeAuth = Auth.getUser();
-      if (activeAuth && (activeAuth.id === owner.id || activeAuth.email === owner.email)) {
-        activeAuth.role = "ORGANIZER";
-        localStorage.setItem("auth_user", JSON.stringify(activeAuth));
-      }
-      showToast(`Đã phê duyệt tổ chức "${org.name}"! Quyền tài khoản ${owner.email} được nâng cấp thành ORGANIZER.`, "success");
-    } else {
-      showToast(`Đã phê duyệt tổ chức "${org.name}"!`, "success");
-    }
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px;">Không có tổ chức nào phù hợp.</td></tr>`;
+    return;
   }
 
-  renderSystemOverview();
-  renderOrganizationsTable();
-  renderUsersTable();
+  tbody.innerHTML = filtered
+    .map((org) => {
+      const st = ORG_STATUS_MAP[org.status] || { label: org.status, cls: "status-closed" };
+      const docCell = isSafeHttpUrl(org.document_url)
+        ? `<a href="${escapeHtml(org.document_url)}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm">Mở tài liệu</a>`
+        : `<span style="color:var(--text-muted);font-size:0.84rem;">Chưa có URL</span>`;
+
+      const reviewCell =
+        org.status === "PENDING"
+          ? `<div style="display:inline-flex;gap:6px;">
+              <button type="button" class="btn btn-primary btn-sm" onclick="approveOrganization(${Number(org.id)})">Duyệt</button>
+              <button type="button" class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="openRejectOrgModal(${Number(org.id)})">Từ chối</button>
+            </div>`
+          : `<span style="color:var(--text-muted);font-size:0.82rem;">Đã xử lý</span>`;
+
+      return `
+        <tr>
+          <td>
+            <strong>${escapeHtml(org.name)}</strong>
+            <div style="font-size:0.8rem;color:var(--text-muted);">${escapeHtml(org.address || "")}</div>
+          </td>
+          <td>
+            <div>${escapeHtml(org.email)}</div>
+            <div style="font-size:0.8rem;color:var(--text-muted);">${escapeHtml(org.phone || "")}</div>
+          </td>
+          <td>${docCell}</td>
+          <td>
+            <span class="status-pill ${st.cls}">${escapeHtml(st.label)}</span>
+            ${org.status === "REJECTED" && org.rejection_reason ? `<div style="font-size:0.78rem;color:var(--danger);margin-top:4px;">${escapeHtml(org.rejection_reason)}</div>` : ""}
+          </td>
+          <td>
+            <button type="button" class="btn btn-outline btn-sm" onclick="openOrgDetailModal(${Number(org.id)})">Xem</button>
+          </td>
+          <td>${reviewCell}</td>
+        </tr>
+      `;
+    })
+    .join("");
+}
+
+function openOrgDetailModal(orgId) {
+  const org = allOrganizations.find((o) => o.id === orgId);
+  if (!org) return;
+  const body = document.getElementById("orgDetailBody");
+  if (!body) return;
+  const docHtml = isSafeHttpUrl(org.document_url)
+    ? `<a href="${escapeHtml(org.document_url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(org.document_url)}</a>`
+    : "Không có";
+
+  body.innerHTML = `
+    <div style="display:grid;gap:10px;font-size:0.92rem;">
+      <div><strong>Tên tổ chức:</strong> ${escapeHtml(org.name)}</div>
+      <div><strong>Email:</strong> ${escapeHtml(org.email)}</div>
+      <div><strong>Số điện thoại:</strong> ${escapeHtml(org.phone || "--")}</div>
+      <div><strong>Địa chỉ:</strong> ${escapeHtml(org.address || "--")}</div>
+      <div><strong>Tài liệu minh chứng:</strong> ${docHtml}</div>
+      <div><strong>Mô tả:</strong> ${escapeHtml(org.description || "Chưa có mô tả")}</div>
+      ${org.rejection_reason ? `<div style="color:var(--danger);"><strong>Lý do từ chối gần nhất:</strong> ${escapeHtml(org.rejection_reason)}</div>` : ""}
+    </div>
+  `;
+  openModal("orgDetailModal");
+}
+
+async function approveOrganization(orgId) {
+  try {
+    await api.patch(`/admin/organizations/${orgId}/review`, null, {
+      params: { action: "APPROVE" },
+    });
+    showToast("Đã phê duyệt hồ sơ tổ chức.", "success");
+    await loadAdminOrganizations();
+    renderOverviewStats();
+  } catch (error) {
+    showToast(extractApiError(error, "Phê duyệt tổ chức thất bại."), "error");
+  }
 }
 
 function openRejectOrgModal(orgId) {
-  document.getElementById("rejectOrgId").value = orgId;
+  document.getElementById("rejectOrgId").value = String(orgId);
   document.getElementById("rejectOrgReasonInput").value = "";
   openModal("rejectOrgModal");
 }
 
-function submitRejectOrg() {
-  const orgId = parseInt(document.getElementById("rejectOrgId").value);
-  const reason = document.getElementById("rejectOrgReasonInput").value.trim();
-
+async function submitRejectOrg() {
+  const orgId = Number(document.getElementById("rejectOrgId")?.value || 0);
+  const reason = document.getElementById("rejectOrgReasonInput")?.value.trim();
   if (!reason) {
-    showToast("Vui lòng nhập lý do từ chối để phản hồi cho tổ chức!", "error");
+    showToast("Vui lòng nhập lý do từ chối.", "warning");
     return;
   }
-
-  DataStore.updateOrgStatus(orgId, "REJECTED", reason);
-  closeModal("rejectOrgModal");
-  showToast("Đã từ chối phê duyệt tổ chức.", "warning");
-  renderSystemOverview();
-  renderOrganizationsTable();
+  try {
+    await api.patch(`/admin/organizations/${orgId}/review`, null, {
+      params: { action: "REJECT", reason },
+    });
+    closeModal("rejectOrgModal");
+    showToast("Đã từ chối hồ sơ tổ chức.", "info");
+    await loadAdminOrganizations();
+    renderOverviewStats();
+  } catch (error) {
+    showToast(extractApiError(error, "Từ chối tổ chức thất bại."), "error");
+  }
 }
 
-// ================= TAB 3: KIỂM DUYỆT CHIẾN DỊCH =================
-function renderCampaignsTable() {
-  const camps = DataStore.getCampaigns();
-  const tbody = document.getElementById("adminCampaignsTbody");
-  if (!tbody) return;
+/* ==================== TAB 3: CHIẾN DỊCH ==================== */
 
-  const statusMap = {
-    OPEN: { label: "Đang mở", class: "status-open" },
-    PENDING: { label: "Chờ kiểm duyệt", class: "status-pending" },
-    DRAFT: { label: "Bản nháp", class: "status-draft" },
-    COMPLETED: { label: "Hoàn thành", class: "status-completed" },
-    REJECTED: { label: "Từ chối", class: "status-rejected" }
-  };
+async function loadAdminCampaigns() {
+  const tbody = document.getElementById("adminCampsTbody");
+  try {
+    const [pendingRes, publicRes] = await Promise.all([
+      api.get("/admin/campaigns/pending"),
+      api.get("/campaigns", { params: { page: 1, page_size: 100 } }),
+    ]);
+    const pendingItems = Array.isArray(pendingRes.data) ? pendingRes.data : [];
+    const publicItems = Array.isArray(publicRes.data?.items) ? publicRes.data.items : [];
 
-  tbody.innerHTML = camps.map(c => {
-    const st = statusMap[c.status] || { label: c.status, class: "status-draft" };
-    return `
-      <tr>
-        <td>
-          <div class="td-title">${escapeHtml(c.title)}</div>
-          <div class="td-subtitle">Lĩnh vực: <strong>${escapeHtml(c.category)}</strong></div>
-        </td>
-        <td>
-          <div style="font-weight: 600;">${escapeHtml(c.organization_name || `Tổ chức #${c.organization_id}`)}</div>
-        </td>
-        <td>
-          <div style="font-size: 13px;">${escapeHtml(c.location)}</div>
-          <div class="td-subtitle">${formatDateTime(c.start_time)}</div>
-        </td>
-        <td>
-          <strong>${c.registered_count || 0}</strong> / ${c.max_participants}
-          <div class="td-subtitle">(${c.estimated_hours}h)</div>
-        </td>
-        <td>
-          <span class="status-pill ${st.class}">
-            <span class="status-dot"></span>
-            ${st.label}
-          </span>
-          ${c.reason ? `<div style="font-size: 11px; color: #b91c1c; margin-top: 4px;">Lý do: ${escapeHtml(c.reason)}</div>` : ""}
-        </td>
-        <td style="text-align: right;">
-          <div class="btn-group-sm" style="justify-content: flex-end;">
-            ${c.status !== "OPEN" ? `
-              <button class="btn-action btn-action-primary" onclick="approveCampaign(${c.id})">✓ Cho phép mở (OPEN)</button>
-            ` : ""}
-            ${c.status !== "REJECTED" ? `
-              <button class="btn-action btn-action-danger" onclick="openRejectCampModal(${c.id})">✕ Từ chối</button>
-            ` : ""}
-          </div>
-        </td>
-      </tr>
-    `;
-  }).join("");
+    const mergedMap = new Map();
+    pendingItems.forEach((c) => mergedMap.set(c.id, c));
+    publicItems.forEach((c) => {
+      if (!mergedMap.has(c.id)) mergedMap.set(c.id, c);
+    });
+    allCampaigns = Array.from(mergedMap.values()).sort((a, b) => b.id - a.id);
+    filterAdminCamps();
+  } catch (error) {
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--danger);padding:20px;">${escapeHtml(extractApiError(error, "Không thể tải danh sách chiến dịch."))}</td></tr>`;
+    }
+  }
 }
 
 function filterAdminCamps() {
-  const query = document.getElementById("adminCampSearch").value.toLowerCase();
-  const status = document.getElementById("adminCampStatusFilter").value;
-  const rows = document.querySelectorAll("#adminCampaignsTbody tr");
+  const q = (document.getElementById("campSearchInput")?.value || "").trim().toLowerCase();
+  const statusVal = document.getElementById("campStatusFilter")?.value || "ALL";
+  const tbody = document.getElementById("adminCampsTbody");
+  if (!tbody) return;
 
-  rows.forEach(row => {
-    const text = row.textContent.toLowerCase();
-    const matchesQuery = !query || text.includes(query);
-    const matchesStatus = !status || text.includes(status.toLowerCase());
-    row.style.display = matchesQuery && matchesStatus ? "" : "none";
+  const filtered = allCampaigns.filter((c) => {
+    const matchStatus = statusVal === "ALL" || c.status === statusVal;
+    const matchText =
+      !q ||
+      (c.title || "").toLowerCase().includes(q) ||
+      (c.location || "").toLowerCase().includes(q) ||
+      (c.organization?.name || "").toLowerCase().includes(q);
+    return matchStatus && matchText;
   });
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px;">Không có chiến dịch nào phù hợp.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered
+    .map((c) => {
+      const st = CAMP_STATUS_MAP[c.status] || { label: c.status, cls: "status-closed" };
+      const orgName = c.organization?.name || c.organization_name || `Tổ chức #${c.organization_id}`;
+      const reviewCell =
+        c.status === "PENDING"
+          ? `<div style="display:inline-flex;gap:6px;">
+              <button type="button" class="btn btn-primary btn-sm" onclick="approveCampaign(${Number(c.id)})">Duyệt</button>
+              <button type="button" class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="openRejectCampModal(${Number(c.id)})">Từ chối</button>
+            </div>`
+          : `<span style="color:var(--text-muted);font-size:0.82rem;">Đã xử lý</span>`;
+
+      const dateRange =
+        c.start_date || c.end_date
+          ? `<div>${formatDateVN(c.start_date)} - ${formatDateVN(c.end_date)}</div>`
+          : `<div>${escapeHtml(c.category || "Chiến dịch cộng đồng")}</div>`;
+      const quotaLine =
+        c.max_volunteers != null
+          ? `<div style="font-size:0.8rem;color:var(--text-muted);">Chỉ tiêu: ${Number(c.max_volunteers)} TNV</div>`
+          : `<div style="font-size:0.8rem;color:var(--text-muted);">Xem chi tiết để biết lịch</div>`;
+
+      return `
+        <tr>
+          <td>
+            <strong>${escapeHtml(c.title)}</strong>
+            <div style="font-size:0.8rem;color:var(--text-muted);">${escapeHtml(c.location || "")}</div>
+          </td>
+          <td>${escapeHtml(orgName)}</td>
+          <td>
+            ${dateRange}
+            ${quotaLine}
+          </td>
+          <td><span class="status-pill ${st.cls}">${escapeHtml(st.label)}</span></td>
+          <td>
+            <a href="campaign_detail.html?id=${encodeURIComponent(c.id)}" class="btn btn-outline btn-sm">Chi tiết</a>
+          </td>
+          <td>${reviewCell}</td>
+        </tr>
+      `;
+    })
+    .join("");
 }
 
-function approveCampaign(campId) {
-  const camp = DataStore.getCampaigns().find(c => c.id === campId);
-  if (camp) {
-    camp.status = "OPEN";
-    camp.reason = null;
-    DataStore.saveCampaign(camp);
-    showToast(`Đã duyệt mở chiến dịch: "${camp.title}"!`, "success");
-    renderSystemOverview();
-    renderCampaignsTable();
+async function approveCampaign(campId) {
+  try {
+    await api.patch(`/admin/campaigns/${campId}/review`, { action: "APPROVE" });
+    showToast("Đã phê duyệt chiến dịch.", "success");
+    await loadAdminCampaigns();
+    renderOverviewStats();
+  } catch (error) {
+    showToast(extractApiError(error, "Phê duyệt chiến dịch thất bại."), "error");
   }
 }
 
 function openRejectCampModal(campId) {
-  document.getElementById("rejectCampId").value = campId;
+  document.getElementById("rejectCampId").value = String(campId);
   document.getElementById("rejectCampReasonInput").value = "";
   openModal("rejectCampModal");
 }
 
-function submitRejectCamp() {
-  const campId = parseInt(document.getElementById("rejectCampId").value);
-  const reason = document.getElementById("rejectCampReasonInput").value.trim();
-
+async function submitRejectCamp() {
+  const campId = Number(document.getElementById("rejectCampId")?.value || 0);
+  const reason = document.getElementById("rejectCampReasonInput")?.value.trim();
   if (!reason) {
-    showToast("Vui lòng ghi rõ hướng dẫn điều chỉnh cho ban tổ chức!", "error");
+    showToast("Vui lòng nhập lý do từ chối chiến dịch.", "warning");
     return;
   }
-
-  const camp = DataStore.getCampaigns().find(c => c.id === campId);
-  if (camp) {
-    camp.status = "REJECTED";
-    camp.reason = reason;
-    DataStore.saveCampaign(camp);
+  try {
+    await api.patch(`/admin/campaigns/${campId}/review`, { action: "REJECT", reason });
     closeModal("rejectCampModal");
-    showToast("Đã từ chối chiến dịch và gửi phản hồi.", "warning");
-    renderSystemOverview();
-    renderCampaignsTable();
+    showToast("Đã từ chối chiến dịch.", "info");
+    await loadAdminCampaigns();
+    renderOverviewStats();
+  } catch (error) {
+    showToast(extractApiError(error, "Từ chối chiến dịch thất bại."), "error");
   }
 }
 
-// ================= TAB 4: QUẢN LÝ NGƯỜI DÙNG & PHÂN QUYỀN =================
-function renderUsersTable() {
-  const users = DataStore.getUsers();
+/* ==================== TAB 4: NGƯỜI DÙNG ==================== */
+
+async function loadAdminUsers() {
   const tbody = document.getElementById("adminUsersTbody");
-  if (!tbody) return;
-
-  tbody.innerHTML = users.map(u => {
-    const isLocked = u.status === "LOCKED";
-    const roleBadgeClass = u.role === "ADMIN" ? "dash-role-admin" : (u.role === "ORGANIZER" ? "dash-role-organizer" : "dash-role-user");
-
-    return `
-      <tr>
-        <td>
-          <div class="td-title">${escapeHtml(u.full_name)}</div>
-          <div class="td-subtitle">ID: USR-${u.id}</div>
-        </td>
-        <td>
-          <div>${escapeHtml(u.email)}</div>
-          <div class="td-subtitle">${escapeHtml(u.phone || "Chưa cập nhật SĐT")}</div>
-        </td>
-        <td>
-          <span class="dash-role-badge ${roleBadgeClass}">${u.role}</span>
-        </td>
-        <td>
-          <span class="status-pill ${isLocked ? "status-locked" : "status-active"}">
-            <span class="status-dot"></span>
-            ${isLocked ? "Bị Khóa (LOCKED)" : "Hoạt động (ACTIVE)"}
-          </span>
-        </td>
-        <td style="font-size: 13px;">${formatDateTime(u.created_at)}</td>
-        <td style="text-align: right;">
-          <div class="btn-group-sm" style="justify-content: flex-end;">
-            ${isLocked ? `
-              <button class="btn-action btn-action-primary" onclick="toggleUserLock(${u.id}, 'ACTIVE')">Mở khóa</button>
-            ` : `
-              <button class="btn-action btn-action-danger" onclick="toggleUserLock(${u.id}, 'LOCKED')">Khóa tài khoản</button>
-            `}
-            <button class="btn-action" style="color: #64748b;" onclick="changeUserRolePrompt(${u.id}, '${u.role}')">Đổi vai trò</button>
-          </div>
-        </td>
-      </tr>
-    `;
-  }).join("");
+  try {
+    const res = await api.get("/admin/users");
+    allUsers = Array.isArray(res.data) ? res.data : [];
+    filterAdminUsers();
+  } catch (error) {
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--danger);padding:20px;">${escapeHtml(extractApiError(error, "Không thể tải danh sách người dùng."))}</td></tr>`;
+    }
+  }
 }
 
 function filterAdminUsers() {
-  const query = document.getElementById("adminUserSearch").value.toLowerCase();
-  const role = document.getElementById("adminUserRoleFilter").value;
-  const status = document.getElementById("adminUserStatusFilter").value;
-  const rows = document.querySelectorAll("#adminUsersTbody tr");
-
-  rows.forEach(row => {
-    const text = row.textContent.toLowerCase();
-    const matchesQuery = !query || text.includes(query);
-    const matchesRole = !role || text.includes(role.toLowerCase());
-    const matchesStatus = !status || text.includes(status.toLowerCase());
-    row.style.display = matchesQuery && matchesRole && matchesStatus ? "" : "none";
-  });
-}
-
-function toggleUserLock(userId, newStatus) {
-  if (userId === currentUser.id) {
-    showToast("Không thể tự khóa tài khoản Admin đang đăng nhập!", "error");
-    return;
-  }
-
-  DataStore.updateUserStatus(userId, newStatus);
-  showToast(`Đã chuyển trạng thái tài khoản thành: ${newStatus}`, "info");
-  renderSystemOverview();
-  renderUsersTable();
-}
-
-function changeUserRolePrompt(userId, currentRole) {
-  if (userId === currentUser.id) {
-    showToast("Không thể tự đổi quyền của tài khoản Admin hiện tại!", "error");
-    return;
-  }
-
-  const newRole = prompt("Nhập vai trò mới (USER / ORGANIZER / ADMIN):", currentRole);
-  if (newRole && ["USER", "ORGANIZER", "ADMIN"].includes(newRole.toUpperCase())) {
-    const users = DataStore.getUsers();
-    const target = users.find(u => u.id === userId);
-    if (target) {
-      target.role = newRole.toUpperCase();
-      DataStore.set(DataStore.STORAGE_KEYS.USERS, users);
-      showToast(`Đã đổi vai trò thành ${target.role}!`, "success");
-      renderUsersTable();
-    }
-  } else if (newRole) {
-    showToast("Vai trò không hợp lệ! Chỉ chấp nhận: USER, ORGANIZER, ADMIN.", "error");
-  }
-}
-
-// ================= TAB 5: GIÁM SÁT CHỨNG CHỈ =================
-function renderCertificatesTable() {
-  const certs = DataStore.getCertificates();
-  const users = DataStore.getUsers();
-  const tbody = document.getElementById("adminCertificatesTbody");
+  const q = (document.getElementById("userSearchInput")?.value || "").trim().toLowerCase();
+  const roleVal = document.getElementById("userRoleFilter")?.value || "ALL";
+  const statusVal = document.getElementById("userStatusFilter")?.value || "ALL";
+  const tbody = document.getElementById("adminUsersTbody");
   if (!tbody) return;
 
-  tbody.innerHTML = certs.map(c => {
-    const user = users.find(u => u.id === c.user_id) || { full_name: "Tình nguyện viên" };
-    const isRevoked = c.status === "REVOKED";
+  const filtered = allUsers.filter((u) => {
+    const matchRole = roleVal === "ALL" || u.role === roleVal;
+    const matchStatus = statusVal === "ALL" || u.status === statusVal;
+    const matchText =
+      !q ||
+      (u.full_name || "").toLowerCase().includes(q) ||
+      (u.email || "").toLowerCase().includes(q);
+    return matchRole && matchStatus && matchText;
+  });
 
-    return `
-      <tr>
-        <td><span class="cert-code" style="margin: 0;">${escapeHtml(c.certificate_code)}</span></td>
-        <td>
-          <div class="td-title">${escapeHtml(user.full_name)}</div>
-          <div class="td-subtitle">ID: USR-${c.user_id}</div>
-        </td>
-        <td>
-          <div style="font-weight: 600;">${escapeHtml(c.campaign_title)}</div>
-        </td>
-        <td><strong>${c.total_hours} giờ</strong></td>
-        <td>
-          <span class="status-pill ${isRevoked ? "status-revoked" : "status-approved"}">
-            <span class="status-dot"></span>
-            ${isRevoked ? "Đã Thu Hồi (REVOKED)" : "Có Hiệu Lực (ACTIVE)"}
-          </span>
-          ${c.revoked_reason ? `<div style="font-size: 11px; color: #b91c1c; margin-top: 4px;">Lý do: ${escapeHtml(c.revoked_reason)}</div>` : ""}
-        </td>
-        <td style="text-align: right;">
-          ${!isRevoked ? `
-            <button class="btn-action btn-action-danger" onclick="openRevokeCertModal(${c.id})">Thu hồi</button>
-          ` : `<span style="font-size: 12px; color: #94a3b8;">Không khả dụng</span>`}
-        </td>
-      </tr>
-    `;
-  }).join("");
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:24px;">Không có tài khoản nào phù hợp.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered
+    .map((u) => {
+      const isSelf = u.id === currentUser.id;
+      const isActive = u.status === "ACTIVE";
+      const nextStatus = isActive ? "LOCKED" : "ACTIVE";
+      const lockLabel = isActive ? "Khóa" : "Mở khóa";
+      const statusCls = isActive ? "status-approved" : "status-rejected";
+      const statusText = isActive ? "Hoạt động" : "Đã khóa";
+
+      return `
+        <tr>
+          <td>
+            <strong>${escapeHtml(u.full_name)}</strong>
+            <div style="font-size:0.8rem;color:var(--text-muted);">${escapeHtml(u.email)}</div>
+          </td>
+          <td><span class="badge badge-info">${escapeHtml(u.role)}</span></td>
+          <td><span class="status-pill ${statusCls}">${statusText}</span></td>
+          <td>${formatDateVN(u.created_at)}</td>
+          <td>
+            ${
+              isSelf
+                ? `<span style="font-size:0.8rem;color:var(--text-muted);">Tài khoản hiện tại</span>`
+                : `<div style="display:flex;gap:6px;flex-wrap:wrap;">
+                    <button type="button" class="btn btn-outline btn-sm" onclick="openChangeRoleModal(${Number(u.id)})">Đổi vai trò</button>
+                    <button type="button" class="btn btn-outline btn-sm" style="color:${isActive ? "var(--danger)" : "var(--primary)"};" onclick="toggleUserStatus(${Number(u.id)}, '${nextStatus}')">${lockLabel}</button>
+                  </div>`
+            }
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+}
+
+async function toggleUserStatus(userId, newStatus) {
+  try {
+    await api.patch(`/admin/users/${userId}/status`, { status: newStatus });
+    showToast(newStatus === "LOCKED" ? "Đã khóa tài khoản." : "Đã mở khóa tài khoản.", "success");
+    await loadAdminUsers();
+  } catch (error) {
+    showToast(extractApiError(error, "Cập nhật trạng thái tài khoản thất bại."), "error");
+  }
+}
+
+function openChangeRoleModal(userId) {
+  const user = allUsers.find((u) => u.id === userId);
+  if (!user) return;
+  document.getElementById("changeRoleUserId").value = String(userId);
+  document.getElementById("changeRoleUserLabel").textContent = `${user.full_name} (${user.email})`;
+  document.getElementById("changeRoleSelect").value = user.role;
+  openModal("changeRoleModal");
+}
+
+async function submitChangeUserRole() {
+  const userId = Number(document.getElementById("changeRoleUserId")?.value || 0);
+  const role = document.getElementById("changeRoleSelect")?.value;
+  if (!role) return;
+  try {
+    await api.patch(`/admin/users/${userId}/role`, { role });
+    closeModal("changeRoleModal");
+    showToast(`Đã cập nhật vai trò thành ${role}.`, "success");
+    await loadAdminUsers();
+  } catch (error) {
+    showToast(extractApiError(error, "Đổi vai trò thất bại."), "error");
+  }
+}
+
+/* ==================== TAB 5: CHỨNG CHỈ ==================== */
+
+async function loadAdminCertificates() {
+  const tbody = document.getElementById("adminCertsTbody");
+  try {
+    const res = await api.get("/admin/certificates");
+    allCertificates = Array.isArray(res.data) ? res.data : [];
+    filterAdminCerts();
+  } catch (error) {
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--danger);padding:20px;">${escapeHtml(extractApiError(error, "Không thể tải danh sách chứng chỉ."))}</td></tr>`;
+    }
+  }
+}
+
+function filterAdminCerts() {
+  const q = (document.getElementById("certSearchInput")?.value || "").trim().toLowerCase();
+  const statusVal = document.getElementById("certStatusFilter")?.value || "ALL";
+  const tbody = document.getElementById("adminCertsTbody");
+  if (!tbody) return;
+
+  const filtered = allCertificates.filter((cert) => {
+    const matchStatus = statusVal === "ALL" || cert.status === statusVal;
+    const matchText =
+      !q ||
+      (cert.certificate_code || "").toLowerCase().includes(q) ||
+      (cert.user_name || "").toLowerCase().includes(q) ||
+      (cert.campaign_title || "").toLowerCase().includes(q);
+    return matchStatus && matchText;
+  });
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px;">Không có chứng chỉ nào phù hợp.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered
+    .map((cert) => {
+      const isActive = cert.status === "ACTIVE";
+      return `
+        <tr>
+          <td><code>${escapeHtml(cert.certificate_code)}</code></td>
+          <td>
+            <strong>${escapeHtml(cert.user_name || `User #${cert.user_id}`)}</strong>
+            <div style="font-size:0.78rem;color:var(--text-muted);">${escapeHtml(cert.user_email || "")}</div>
+          </td>
+          <td>${escapeHtml(cert.campaign_title || `Campaign #${cert.campaign_id}`)}</td>
+          <td>${Number(cert.total_hours || 0).toFixed(1)} giờ</td>
+          <td>
+            <span class="status-pill ${isActive ? "status-approved" : "status-rejected"}">${escapeHtml(cert.status)}</span>
+            ${!isActive && cert.revoked_reason ? `<div style="font-size:0.78rem;color:var(--danger);margin-top:4px;">${escapeHtml(cert.revoked_reason)}</div>` : ""}
+          </td>
+          <td>
+            ${
+              isActive
+                ? `<button type="button" class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="openRevokeCertModal(${Number(cert.id)})">Thu hồi</button>`
+                : `<span style="font-size:0.8rem;color:var(--text-muted);">Đã thu hồi</span>`
+            }
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
 }
 
 function openRevokeCertModal(certId) {
-  document.getElementById("revokeCertId").value = certId;
+  document.getElementById("revokeCertId").value = String(certId);
   document.getElementById("revokeCertReasonInput").value = "";
   openModal("revokeCertModal");
 }
 
-function submitRevokeCert() {
-  const certId = parseInt(document.getElementById("revokeCertId").value);
-  const reason = document.getElementById("revokeCertReasonInput").value.trim();
-
+async function submitRevokeCert() {
+  const certId = Number(document.getElementById("revokeCertId")?.value || 0);
+  const reason = document.getElementById("revokeCertReasonInput")?.value.trim();
   if (!reason) {
-    showToast("Vui lòng nhập lý do thu hồi chứng chỉ!", "error");
+    showToast("Vui lòng nhập lý do thu hồi chứng chỉ.", "warning");
     return;
   }
-
-  DataStore.revokeCertificate(certId, reason);
-  closeModal("revokeCertModal");
-  showToast("Đã thu hồi chứng chỉ thành công!", "warning");
-  renderCertificatesTable();
-}
-
-// Health check
-async function checkBackendHealth() {
   try {
-    const res = await api.get("/health");
-    showToast(`Kết nối Backend OK! Database: ${res.data?.database || "Connected"}`, "success");
-  } catch (err) {
-    showToast("Không thể kết nối Backend FastAPI tại port 8000. Hãy kiểm tra server!", "error");
+    await api.patch(`/admin/certificates/${certId}/revoke`, { reason });
+    closeModal("revokeCertModal");
+    showToast("Đã thu hồi chứng chỉ.", "info");
+    await loadAdminCertificates();
+  } catch (error) {
+    showToast(extractApiError(error, "Thu hồi chứng chỉ thất bại."), "error");
   }
 }
 
+/* ==================== TAB 6 & MODALS ==================== */
+
 function exportSystemReport() {
-  const users = DataStore.getUsers();
-  const orgs = DataStore.getOrganizations();
-  const camps = DataStore.getCampaigns();
-  const certs = DataStore.getCertificates();
-
-  const reportData = `BÁO CÁO TỔNG HỢP VOLUNTEERLINK
-Thời gian xuất: ${new Date().toLocaleString("vi-VN")}
-========================================
-- Tổng người dùng: ${users.length}
-  * Tình nguyện viên (USER): ${users.filter(u => u.role === "USER").length}
-  * Tổ chức (ORGANIZER): ${users.filter(u => u.role === "ORGANIZER").length}
-  * Quản trị viên (ADMIN): ${users.filter(u => u.role === "ADMIN").length}
-- Tổng tổ chức đăng ký: ${orgs.length} (Đã duyệt: ${orgs.filter(o => o.status === "APPROVED").length})
-- Tổng chiến dịch: ${camps.length} (Đang mở: ${camps.filter(c => c.status === "OPEN").length})
-- Tổng chứng chỉ đã phát hành: ${certs.length}
-========================================`;
-
-  const blob = new Blob([reportData], { type: "text/plain;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `Bao_Cao_VolunteerLink_${Date.now()}.txt`;
-  a.click();
-  showToast("Đã xuất báo cáo hệ thống thành công!", "success");
+  const rows = [
+    ["Chi so", "Gia tri"],
+    ["Tong to chuc", String(allOrganizations.length)],
+    ["To chuc cho duyet", String(allOrganizations.filter((o) => o.status === "PENDING").length)],
+    ["To chuc da duyet", String(allOrganizations.filter((o) => o.status === "APPROVED").length)],
+    ["Chien dich cho duyet", String(allCampaigns.filter((c) => c.status === "PENDING").length)],
+    ["Chien dich dang mo", String(allCampaigns.filter((c) => c.status === "OPEN").length)],
+    ["Tong nguoi dung", String(allUsers.length)],
+    ["Tong chung chi", String(allCertificates.length)],
+  ];
+  const csv = "\uFEFF" + rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `volunteerlink_admin_report_${new Date().toISOString().slice(0, 10)}.csv`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+  showToast("Đã xuất báo cáo CSV.", "success");
 }
 
-// Modal helpers
 function openModal(modalId) {
   const modal = document.getElementById(modalId);
   if (modal) modal.classList.add("open");
@@ -570,4 +753,3 @@ function closeModal(modalId) {
   const modal = document.getElementById(modalId);
   if (modal) modal.classList.remove("open");
 }
-
