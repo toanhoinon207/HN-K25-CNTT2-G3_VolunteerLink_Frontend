@@ -499,7 +499,130 @@ const NotificationsUI = (() => {
         }
     }
 
-    // ================= NAVIGATION =================
+    // ================= DETAIL MODAL & NAVIGATION =================
+
+    let detailModalTargetUrl = null;
+
+    function getLinkLabel(link) {
+        if (!link || typeof link !== "string") return "";
+        if (link.includes("campaigns") || link.includes("tab=campaigns")) return "Quản lý chiến dịch";
+        if (link.includes("tab=volunteers") || link.includes("registrations")) return "Duyệt đơn đăng ký";
+        if (link.includes("tab=certificates") || link.includes("certificate")) return "Chứng nhận & Giờ đóng góp";
+        if (link.includes("tab=profile") || link.includes("tab=upgrade")) return "Hồ sơ tổ chức / Nâng cấp";
+        if (link.includes("admin-dashboard")) return "Bảng điều khiển Quản trị";
+        if (link.includes("user-dashboard")) return "Bảng điều khiển Tình nguyện viên";
+        if (link.includes("organizer-dashboard")) return "Bảng điều khiển Nhà tổ chức";
+        return "Trang liên quan";
+    }
+
+    function ensureDetailModal() {
+        let backdrop = getElement("vlNotificationDetailModal");
+        if (backdrop) return backdrop;
+
+        backdrop = document.createElement("div");
+        backdrop.id = "vlNotificationDetailModal";
+        backdrop.className = "vl-notif-modal-backdrop";
+        backdrop.hidden = true;
+        backdrop.setAttribute("role", "dialog");
+        backdrop.setAttribute("aria-modal", "true");
+        backdrop.setAttribute("aria-labelledby", "vlNotifModalTitle");
+
+        backdrop.innerHTML = `
+            <div class="vl-notif-modal">
+                <div class="vl-notif-modal-header">
+                    <div class="vl-notif-modal-head-left">
+                        <div class="vl-notif-modal-icon" aria-hidden="true">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                        </div>
+                        <div class="vl-notif-modal-badges">
+                            <span class="vl-notif-category-pill">Thông báo hệ thống</span>
+                            <span class="vl-notif-status-pill" id="vlNotifModalStatusPill">Đã đọc</span>
+                        </div>
+                    </div>
+                    <button type="button" class="vl-notif-modal-close" id="vlNotifModalCloseBtn" aria-label="Đóng hộp thoại">&times;</button>
+                </div>
+
+                <div class="vl-notif-modal-body">
+                    <h3 class="vl-notif-modal-title" id="vlNotifModalTitle"></h3>
+                    <div class="vl-notif-modal-meta">
+                        <span class="vl-notif-modal-time" id="vlNotifModalTime"></span>
+                    </div>
+                    <div class="vl-notif-modal-content" id="vlNotifModalContent"></div>
+                    <div class="vl-notif-modal-dest" id="vlNotifModalDest" hidden>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                        <span id="vlNotifModalDestText"></span>
+                    </div>
+                </div>
+
+                <div class="vl-notif-modal-footer">
+                    <button type="button" class="vl-notif-btn-secondary" id="vlNotifModalDismissBtn">Đóng</button>
+                    <button type="button" class="vl-notif-btn-primary" id="vlNotifModalActionBtn" hidden>Đi tới trang liên quan ↗</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(backdrop);
+
+        backdrop.addEventListener("click", (event) => {
+            if (event.target === backdrop) closeDetailModal();
+        });
+        getElement("vlNotifModalCloseBtn")?.addEventListener("click", closeDetailModal);
+        getElement("vlNotifModalDismissBtn")?.addEventListener("click", closeDetailModal);
+        getElement("vlNotifModalActionBtn")?.addEventListener("click", () => {
+            const url = detailModalTargetUrl;
+            closeDetailModal();
+            if (url) window.location.assign(url);
+        });
+
+        return backdrop;
+    }
+
+    function updateDetailModalStatus(isRead) {
+        const pill = getElement("vlNotifModalStatusPill");
+        if (!pill) return;
+        pill.className = `vl-notif-status-pill ${isRead ? "is-read" : "is-unread"}`;
+        pill.textContent = isRead ? "Đã đọc" : "Chưa đọc";
+    }
+
+    function closeDetailModal() {
+        const backdrop = getElement("vlNotificationDetailModal");
+        if (backdrop) backdrop.hidden = true;
+        detailModalTargetUrl = null;
+    }
+
+    function showDetailModal(item, targetUrl) {
+        const backdrop = ensureDetailModal();
+        const titleEl = getElement("vlNotifModalTitle");
+        const timeEl = getElement("vlNotifModalTime");
+        const contentEl = getElement("vlNotifModalContent");
+        const destEl = getElement("vlNotifModalDest");
+        const destTextEl = getElement("vlNotifModalDestText");
+        const actionBtn = getElement("vlNotifModalActionBtn");
+
+        if (titleEl) titleEl.textContent = item.title || "Thông báo";
+        if (timeEl) {
+            const timeStr = formatTime(item.created_at);
+            timeEl.textContent = timeStr ? `Nhận lúc: ${timeStr}` : "Vừa xong";
+        }
+        if (contentEl) {
+            contentEl.textContent = (item.message || item.content || "").trim() || "Không có nội dung chi tiết bổ sung.";
+        }
+
+        updateDetailModalStatus(Boolean(item.is_read));
+        detailModalTargetUrl = targetUrl || null;
+
+        if (targetUrl) {
+            if (destTextEl) destTextEl.textContent = `Trang đích: ${getLinkLabel(item.link)}`;
+            if (destEl) destEl.hidden = false;
+            if (actionBtn) actionBtn.hidden = false;
+        } else {
+            if (destEl) destEl.hidden = true;
+            if (actionBtn) actionBtn.hidden = true;
+        }
+
+        backdrop.hidden = false;
+        getElement("vlNotifModalCloseBtn")?.focus();
+    }
 
     async function openNotification(id) {
         const item = notifications.find(
@@ -509,18 +632,15 @@ const NotificationsUI = (() => {
         if (!item) return;
 
         const target = getNotificationLink(item.link);
+        if (!isInbox() && isOpen) {
+            toggle(false);
+        }
+
+        showDetailModal(item, target);
 
         if (!item.is_read) {
             await markRead(id);
-        }
-
-        if (target) {
-            window.location.assign(target);
-        } else {
-            console.info(
-                "Notifications: Thông báo chưa có đường dẫn",
-                item
-            );
+            updateDetailModalStatus(true);
         }
     }
 
@@ -601,8 +721,15 @@ const NotificationsUI = (() => {
         });
 
         document.addEventListener("keydown", event => {
-            if (event.key === "Escape" && isOpen) {
-                toggle(false);
+            if (event.key === "Escape") {
+                const detailModal = getElement("vlNotificationDetailModal");
+                if (detailModal && !detailModal.hidden) {
+                    closeDetailModal();
+                    return;
+                }
+                if (isOpen) {
+                    toggle(false);
+                }
             }
         });
 

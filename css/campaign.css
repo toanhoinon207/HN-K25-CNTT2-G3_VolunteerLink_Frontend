@@ -123,24 +123,6 @@
   position: relative;
 }
 
-.campaign-list-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 18px;
-}
-
-.campaign-list-grid .campaign-card-img {
-  height: 165px;
-}
-
-.campaign-list-grid .campaign-card-body {
-  padding: 16px;
-}
-
-.campaign-list-grid .campaign-card-title {
-  font-size: 1.05rem;
-}
-
 .campaign-empty-title {
   display: block;
   font-size: 1.05rem;

@@ -6,6 +6,7 @@
   <title>Bảng điều khiển Tình nguyện viên - VolunteerLink</title>
   <link rel="icon" type="image/svg+xml" href="../assets/images/logo.svg">
   <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/dashboard_common.css">
   <link rel="stylesheet" href="../css/user_dashboard.css">
   <link rel="stylesheet" href="../css/responsive.css">
 </head>
@@ -274,6 +275,19 @@
               <tbody id="attendanceHistoryTbody"></tbody>
             </table>
           </div>
+        </div>
+      </div>
+      <div class="ud-card" style="margin-top:16px;">
+        <div class="ud-card-header"><h2>Khiếu nại thiếu CHECK-IN / CHECK-OUT</h2></div>
+        <div class="ud-card-body">
+          <p>Chỉ gửi sau khi chiến dịch hoàn thành. Khiếu nại được duyệt không tự xác minh giờ.</p>
+          <form id="attendanceAppealForm">
+            <div class="ud-field"><label for="attendanceAppealCampaign">Đơn tham gia đã duyệt</label><select class="ud-control" id="attendanceAppealCampaign" required></select></div>
+            <div class="ud-field"><label for="attendanceAppealReason">Lý do và thông tin đối chiếu</label><textarea class="ud-control" id="attendanceAppealReason" minlength="10" maxlength="2000" required></textarea></div>
+            <div class="ud-field"><label for="attendanceAppealEvidence">Đường dẫn bằng chứng (không bắt buộc)</label><input class="ud-control" type="url" id="attendanceAppealEvidence" maxlength="500"></div>
+            <button type="submit" class="btn btn-primary">Gửi khiếu nại điểm danh</button>
+          </form>
+          <div id="attendanceAppealsMine" style="margin-top:12px;" aria-live="polite"></div>
         </div>
       </div>
     </section>

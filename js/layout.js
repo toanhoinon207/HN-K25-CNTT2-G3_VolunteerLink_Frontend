@@ -8,15 +8,21 @@ const Layout = {
   DEFAULT_CAMPAIGN_IMAGE: "../assets/images/logo.svg",
 
   CAMPAIGN_STATUS_MAP: {
+    DRAFT: { label: "Bản nháp", cls: "badge-info" },
+    PENDING: { label: "Chờ duyệt", cls: "badge-warning" },
     OPEN: { label: "Đang mở", cls: "badge-success" },
     CLOSED: { label: "Đã đóng", cls: "badge-warning" },
     COMPLETED: { label: "Hoàn thành", cls: "badge-info" },
+    CANCELLED: { label: "Đã hủy", cls: "badge-danger" },
   },
 
   CAMPAIGN_DETAIL_STATUS_MAP: {
+    DRAFT: { label: "Bản nháp", cls: "badge-info" },
+    PENDING: { label: "Chờ Admin duyệt", cls: "badge-warning" },
     OPEN: { label: "Đang mở đăng ký", cls: "badge-success" },
     CLOSED: { label: "Đã đóng tuyển", cls: "badge-warning" },
     COMPLETED: { label: "Đã hoàn thành", cls: "badge-info" },
+    CANCELLED: { label: "Đã hủy", cls: "badge-danger" },
   },
 
   ROLE_LABELS: {
@@ -216,7 +222,44 @@ const Layout = {
     const raw = String(link || "").trim();
     if (!raw) return false;
     if (/^(javascript|data|vbscript):/i.test(raw) || raw.startsWith("//")) return false;
-    return true;
+    try {
+      const target = new URL(raw, window.location.href);
+      return (
+        target.origin === window.location.origin &&
+        ["http:", "https:"].includes(target.protocol)
+      );
+    } catch {
+      return false;
+    }
+  },
+
+  resolveNotificationLink(link, userRole) {
+    const raw = String(link || "").trim();
+    if (!raw) return null;
+    if (!this.isSafeInternalLink(raw)) return null;
+
+    const campaignMatch = raw.match(/^\/(?:api\/)?campaigns\/(\d+)\/?$/);
+    let mapped = raw;
+    if (campaignMatch) {
+      const campId = campaignMatch[1];
+      mapped = `campaign_detail.html?id=${campId}`;
+    } else if (/^\/?pages\//i.test(mapped)) {
+      mapped = mapped.replace(/^\/?pages\//i, "");
+    } else if (/^\/index\.html/i.test(mapped)) {
+      mapped = mapped.replace(/^\//, "");
+    }
+
+    const inPages = window.location.pathname.includes("/pages/");
+    if (!/^https?:\/\//i.test(mapped) && !mapped.startsWith("/")) {
+      if (/^index\.html/i.test(mapped)) {
+        mapped = inPages ? `../${mapped}` : mapped;
+      } else if (!inPages && !mapped.startsWith("../")) {
+        mapped = `pages/${mapped}`;
+      }
+    }
+
+    if (!this.isSafeInternalLink(mapped)) return null;
+    return mapped;
   },
 
   initNotificationBell(userRole) {
@@ -284,18 +327,25 @@ const Layout = {
         itemBtn.addEventListener("click", async () => {
           const id = Number(itemBtn.getAttribute("data-notif-id"));
           const target = cachedItems.find((x) => x.id === id);
-          if (target && !target.is_read) {
+          if (!target) return;
+
+          setOpen(false);
+          const allModal = document.getElementById("vlNotifAllModal");
+          if (allModal) allModal.classList.remove("open");
+
+          const wasUnread = !target.is_read;
+          this.openNotificationDetailModal(target, userRole);
+
+          if (wasUnread) {
             target.is_read = true;
             itemBtn.classList.remove("is-unread");
             updateUnreadUI(currentUnread - 1);
             try {
               await api.patch(`/notifications/${id}/read`);
+              this.updateNotificationDetailStatus(true);
             } catch {
-              // Bỏ qua lỗi phụ khi chuyển trang
+              // Bỏ qua lỗi phụ khi đánh dấu đã đọc
             }
-          }
-          if (target && this.isSafeInternalLink(target.link)) {
-            window.location.href = target.link;
           }
         });
       });
@@ -403,6 +453,127 @@ const Layout = {
 
     modal.classList.add("open");
     loadFn(document.getElementById("vlNotifModalBody"), 50);
+  },
+
+  getNotificationLinkLabel(link) {
+    if (!link || typeof link !== "string") return "Trang liên quan";
+    if (link.includes("campaigns") || link.includes("tab=campaigns")) return "Quản lý chiến dịch";
+    if (link.includes("tab=volunteers") || link.includes("registrations")) return "Duyệt đơn đăng ký";
+    if (link.includes("tab=certificates") || link.includes("certificate")) return "Chứng nhận & Giờ đóng góp";
+    if (link.includes("tab=profile") || link.includes("tab=upgrade")) return "Hồ sơ tổ chức / Nâng cấp";
+    if (link.includes("admin-dashboard")) return "Bảng điều khiển Quản trị";
+    if (link.includes("user-dashboard")) return "Bảng điều khiển Tình nguyện viên";
+    if (link.includes("organizer-dashboard")) return "Bảng điều khiển Nhà tổ chức";
+    return "Trang liên quan";
+  },
+
+  updateNotificationDetailStatus(isRead) {
+    const pill = document.getElementById("vlNotifDetailStatusPill");
+    if (!pill) return;
+    pill.className = `vl-notif-detail-status ${isRead ? "is-read" : "is-unread"}`;
+    pill.textContent = isRead ? "Đã đọc" : "Chưa đọc";
+  },
+
+  openNotificationDetailModal(item, userRole) {
+    if (!item) return;
+    let backdrop = document.getElementById("vlNotifDetailModal");
+    if (!backdrop) {
+      backdrop = document.createElement("div");
+      backdrop.id = "vlNotifDetailModal";
+      backdrop.className = "vl-notif-detail-backdrop";
+      backdrop.hidden = true;
+      backdrop.setAttribute("role", "dialog");
+      backdrop.setAttribute("aria-modal", "true");
+      backdrop.setAttribute("aria-labelledby", "vlNotifDetailTitle");
+      backdrop.innerHTML = `
+        <div class="vl-notif-detail-modal">
+          <div class="vl-notif-detail-header">
+            <div class="vl-notif-detail-head-left">
+              <div class="vl-notif-detail-icon" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              </div>
+              <div class="vl-notif-detail-badges">
+                <span class="vl-notif-detail-cat" id="vlNotifDetailCategory">Thông báo hệ thống</span>
+                <span class="vl-notif-detail-status" id="vlNotifDetailStatusPill">Đã đọc</span>
+              </div>
+            </div>
+            <button type="button" class="vl-notif-detail-close" id="vlNotifDetailCloseBtn" aria-label="Đóng hộp thoại">&times;</button>
+          </div>
+          <div class="vl-notif-detail-body">
+            <h3 class="vl-notif-detail-title" id="vlNotifDetailTitle"></h3>
+            <div class="vl-notif-detail-meta">
+              <span id="vlNotifDetailTime"></span>
+            </div>
+            <div class="vl-notif-detail-content" id="vlNotifDetailContent"></div>
+            <div class="vl-notif-detail-dest" id="vlNotifDetailDest" hidden>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+              <span id="vlNotifDetailDestText"></span>
+            </div>
+          </div>
+          <div class="vl-notif-detail-footer">
+            <button type="button" class="vl-notif-detail-btn-sec" id="vlNotifDetailDismissBtn">Đóng</button>
+            <button type="button" class="vl-notif-detail-btn-pri" id="vlNotifDetailActionBtn" hidden>Đi tới trang liên quan ↗</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(backdrop);
+
+      const close = () => {
+        backdrop.hidden = true;
+        backdrop.dataset.targetLink = "";
+      };
+      backdrop.addEventListener("click", (e) => {
+        if (e.target === backdrop) close();
+      });
+      document.getElementById("vlNotifDetailCloseBtn")?.addEventListener("click", close);
+      document.getElementById("vlNotifDetailDismissBtn")?.addEventListener("click", close);
+      document.getElementById("vlNotifDetailActionBtn")?.addEventListener("click", () => {
+        const targetLink = backdrop.dataset.targetLink;
+        close();
+        if (targetLink && this.isSafeInternalLink(targetLink)) {
+          window.location.href = targetLink;
+        }
+      });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && !backdrop.hidden) close();
+      });
+    }
+
+    const roleLabel = this.ROLE_LABELS[userRole] || "Thông báo hệ thống";
+    const catEl = document.getElementById("vlNotifDetailCategory");
+    const titleEl = document.getElementById("vlNotifDetailTitle");
+    const timeEl = document.getElementById("vlNotifDetailTime");
+    const contentEl = document.getElementById("vlNotifDetailContent");
+    const destEl = document.getElementById("vlNotifDetailDest");
+    const destTextEl = document.getElementById("vlNotifDetailDestText");
+    const actionBtn = document.getElementById("vlNotifDetailActionBtn");
+
+    if (catEl) catEl.textContent = roleLabel;
+    if (titleEl) titleEl.textContent = item.title || "Thông báo";
+    if (timeEl) {
+      const timeStr = this.formatNotificationTime(item.created_at);
+      timeEl.textContent = timeStr ? `Thời gian: ${timeStr}` : "Vừa xong";
+    }
+    if (contentEl) {
+      const text = (item.message || item.content || "").trim();
+      contentEl.textContent = text || "Không có nội dung chi tiết bổ sung.";
+    }
+
+    this.updateNotificationDetailStatus(Boolean(item.is_read));
+
+    const resolvedLink = this.resolveNotificationLink(item.link, userRole);
+    backdrop.dataset.targetLink = resolvedLink || "";
+    if (resolvedLink) {
+      if (destTextEl) destTextEl.textContent = `Trang đích: ${this.getNotificationLinkLabel(resolvedLink)}`;
+      if (destEl) destEl.hidden = false;
+      if (actionBtn) actionBtn.hidden = false;
+    } else {
+      if (destEl) destEl.hidden = true;
+      if (actionBtn) actionBtn.hidden = true;
+    }
+
+    backdrop.hidden = false;
+    document.getElementById("vlNotifDetailCloseBtn")?.focus();
   },
 
   applyFallbackImage(imgEl) {

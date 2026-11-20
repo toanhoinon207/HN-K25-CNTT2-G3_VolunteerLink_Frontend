@@ -37,20 +37,43 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
   setupMobileMenu();
 
+  // Gắn sự kiện đăng xuất sớm để luôn hoạt động kể cả khi dữ liệu tab chưa tải xong
+  const logoutBtn = document.getElementById("logoutBtn");
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", async () => {
+      try {
+        await api.post("/auth/logout");
+      } catch {
+        // Vẫn xóa session cục bộ nếu token đã hết hạn hoặc mất kết nối
+      }
+      Auth.logout();
+    });
+  }
+
   // 5. Nạp dữ liệu các thành phần
   renderOverview();
   loadOrganizerStats();
   renderCampaignsTable();
   setupAttendanceGenerator();
   renderVolunteerApplicants();
-  renderWaitlist();
+  loadCampaignWaitlist();
   renderCertificatesAndClaims();
   setupOrgProfileForm();
 
-  // 6. Đăng xuất
-  document.getElementById("logoutBtn").addEventListener("click", () => {
-    Auth.logout();
-  });
+  // Áp dụng ?campaign_id= nếu điều hướng từ trang chi tiết chiến dịch
+  const urlCampaignId = new URLSearchParams(window.location.search).get("campaign_id");
+  if (urlCampaignId) {
+    const volFilter = document.getElementById("volCampaignFilter");
+    if (volFilter && Array.from(volFilter.options).some((o) => o.value === urlCampaignId)) {
+      volFilter.value = urlCampaignId;
+      onVolunteerCampaignChange();
+    }
+    const attSelect = document.getElementById("codeGenCampaignSelect");
+    if (attSelect && Array.from(attSelect.options).some((o) => o.value === urlCampaignId)) {
+      attSelect.value = urlCampaignId;
+      renderLiveAttendanceList();
+    }
+  }
 });
 
 async function loadOrganizerCampaigns() {
@@ -127,9 +150,14 @@ async function loadCurrentOrganization() {
     DataStore.set(DataStore.STORAGE_KEYS.ORGS, orgs);
   }
 
-  // Hiển thị trạng thái xác thực
+  renderOrgStatusBanner();
+}
+
+function renderOrgStatusBanner() {
+  if (!currentOrg) return;
   const badgeEl = document.getElementById("orgVerificationBadge");
   const alertEl = document.getElementById("orgStatusAlertBanner");
+  if (!badgeEl || !alertEl) return;
 
   if (currentOrg.status === "APPROVED") {
     badgeEl.className = "status-pill status-approved";
@@ -652,91 +680,79 @@ function renderOverview() {
 // ================= TAB 2: QUẢN LÝ CHIẾN DỊCH =================
 function renderCampaignsTable() {
   const allCampaigns = getOrgCampaigns();
-  const tbody = document.getElementById("orgCampaignsTbody");
-  if (!tbody) return;
+  const grid = document.getElementById("orgCampaignsGrid");
+  const template = document.getElementById("org-campaign-card-template");
+  const emptyEl = document.getElementById("orgCampaignsEmptyState");
+  if (!grid || !template) return;
+
+  grid.innerHTML = "";
 
   if (allCampaigns.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 36px; color: #94a3b8;">Chưa có chiến dịch nào được tạo.</td></tr>`;
+    if (emptyEl) {
+      emptyEl.style.display = "block";
+      emptyEl.textContent = "Chưa có chiến dịch nào được tạo.";
+    }
     return;
   }
+  if (emptyEl) emptyEl.style.display = "none";
 
-  const statusMap = {
-    DRAFT: { label: "Bản nháp", class: "status-draft" },
-    PENDING: { label: "Chờ Admin duyệt", class: "status-pending" },
-    OPEN: { label: "Đang mở tuyển", class: "status-open" },
-    CLOSED: { label: "Đã đóng đơn", class: "status-closed" },
-    COMPLETED: { label: "Đã hoàn thành", class: "status-completed" },
-    CANCELLED: { label: "Đã hủy", class: "status-cancelled" }
-  };
+  const fragment = document.createDocumentFragment();
+  allCampaigns.forEach((c) => {
+    const campForCard = {
+      ...c,
+      organization: c.organization || { name: currentOrg?.name || currentUser?.full_name || "Tổ chức của bạn" },
+    };
+    const cardFrag = Layout.createCampaignCard(campForCard, template);
+    const cardEl = cardFrag.querySelector(".campaign-card");
+    if (!cardEl) return;
 
-  tbody.innerHTML = allCampaigns.map(c => {
-    const st = statusMap[c.status] || { label: c.status, class: "status-draft" };
-    return `
-      <tr data-status="${escapeHtml(c.status)}">
-        <td>
-          <div class="td-title">${escapeHtml(c.title)}</div>
-          <div class="td-subtitle">Mã: CAMP-${c.id}</div>
-        </td>
-        <td>
-          <div><strong style="color: #1d4ed8;">${escapeHtml(c.category)}</strong></div>
-          <div class="td-subtitle">${escapeHtml(c.location)}</div>
-        </td>
-        <td>
-          <div style="font-size: 13px;">Bắt đầu: ${formatDateTime(c.start_time)}</div>
-          <div class="td-subtitle">Hạn ĐK: ${formatDateTime(c.registration_deadline)}</div>
-        </td>
-        <td>
-          <strong>${c.registered_count || 0}</strong> / ${c.max_participants}
-          <div class="td-subtitle">(${c.estimated_hours} giờ)</div>
-        </td>
-        <td>
-          <span class="status-pill ${st.class}">
-            <span class="status-dot"></span>
-            ${st.label}
-          </span>
-          ${c.reason ? `<div style="font-size: 11px; color: #b91c1c; margin-top: 4px;">Góp ý: ${escapeHtml(c.reason)}</div>` : ""}
-        </td>
-        <td style="text-align: right;">
-          <div class="btn-group-sm" style="justify-content: flex-end;">
-            ${c.status === "DRAFT" ? `
-              <button class="btn-action btn-action-blue" onclick="submitCampaignToAdmin(${c.id})">Gửi duyệt</button>
-            ` : ""}
-            ${c.status === "OPEN" ? `
-              <button class="btn-action btn-action-primary" onclick="quickOpenAttendance(${c.id})">Điểm danh</button>
-            ` : ""}
-            <button class="btn-action" style="color: #64748b;" onclick="openCampaignDetailModal(${c.id})">Xem</button>
-          </div>
-        </td>
-      </tr>
-    `;
-  }).join("");
+    cardEl.dataset.status = c.status || "";
+    const slotsEl = cardEl.querySelector(".card-slots");
+    if (slotsEl) {
+      slotsEl.textContent = `${c.registered_count || 0} / ${c.max_participants} TNV (${c.estimated_hours || 0} giờ)`;
+    }
+    const startEl = cardEl.querySelector(".card-start-time");
+    if (startEl) {
+      startEl.textContent = formatDateTime(c.start_time);
+    }
+
+    const reasonEl = cardEl.querySelector(".org-card-reason");
+    if (reasonEl && c.reason) {
+      reasonEl.textContent = `Góp ý: ${c.reason}`;
+      reasonEl.hidden = false;
+    }
+
+    fragment.appendChild(cardFrag);
+  });
+
+  grid.appendChild(fragment);
+  filterOrgCampaigns();
 }
 
 function filterOrgCampaigns() {
   const query = (document.getElementById("orgCampaignSearch")?.value || "").trim().toLowerCase();
   const status = document.getElementById("orgCampaignStatusFilter")?.value || "ALL";
-  const rows = document.querySelectorAll("#orgCampaignsTbody tr[data-status]");
+  const cards = document.querySelectorAll("#orgCampaignsGrid .campaign-card[data-status]");
 
   let visibleCount = 0;
-  rows.forEach(row => {
-    const text = row.textContent.toLowerCase();
-    const rowStatus = row.dataset.status || "";
+  cards.forEach((card) => {
+    const text = card.textContent.toLowerCase();
+    const cardStatus = card.dataset.status || "";
     const matchesQuery = !query || text.includes(query);
-    const matchesStatus = status === "ALL" || !status || rowStatus === status;
+    const matchesStatus = status === "ALL" || !status || cardStatus === status;
     const isVisible = matchesQuery && matchesStatus;
-    row.style.display = isVisible ? "" : "none";
+    card.style.display = isVisible ? "" : "none";
     if (isVisible) visibleCount += 1;
   });
 
-  const tbody = document.getElementById("orgCampaignsTbody");
-  const existingEmpty = document.getElementById("orgCampaignFilterEmptyRow");
-  if (existingEmpty) existingEmpty.remove();
-
-  if (tbody && rows.length > 0 && visibleCount === 0) {
-    const emptyRow = document.createElement("tr");
-    emptyRow.id = "orgCampaignFilterEmptyRow";
-    emptyRow.innerHTML = `<td colspan="6" style="text-align: center; padding: 32px; color: #94a3b8;">Không có chiến dịch nào phù hợp bộ lọc.</td>`;
-    tbody.appendChild(emptyRow);
+  const emptyEl = document.getElementById("orgCampaignsEmptyState");
+  if (emptyEl && cards.length > 0) {
+    if (visibleCount === 0) {
+      emptyEl.style.display = "block";
+      emptyEl.textContent = "Không có chiến dịch nào phù hợp bộ lọc.";
+    } else {
+      emptyEl.style.display = "none";
+    }
   }
 }
 
@@ -1144,17 +1160,23 @@ async function submitCreateCampaign() {
     upsertOrgCampaign({ registered_count: 0, ...createdCamp });
     showToast("Tạo chiến dịch thành công (DRAFT) trên Backend!", "success");
   } catch (error) {
-    console.warn("Backend /campaigns chưa kết nối hoặc lỗi, lưu vào Local DataStore:", error);
-    const localCamp = {
-      id: Date.now(),
-      organization_id: currentOrg.id,
-      organization_name: currentOrg.name,
-      ...payload,
-      registered_count: 0,
-      status: "DRAFT",
-    };
-    upsertOrgCampaign(localCamp);
-    showToast("Đã lưu bản nháp chiến dịch thành công!", "success");
+    if (!error.response) {
+      console.warn("Mất kết nối Backend /campaigns, lưu tạm vào Local DataStore:", error);
+      const localCamp = {
+        id: Date.now(),
+        organization_id: currentOrg.id,
+        organization_name: currentOrg.name,
+        ...payload,
+        registered_count: 0,
+        status: "DRAFT",
+      };
+      upsertOrgCampaign(localCamp);
+      showToast("Đã lưu bản nháp chiến dịch (cục bộ).", "success");
+    } else {
+      const msg = Layout.extractApiErrorMessage(error, "Không thể tạo chiến dịch.");
+      showToast(msg, "error");
+      return;
+    }
   }
 
   closeModal("createCampaignModal");
@@ -1237,13 +1259,17 @@ async function submitCampaignToAdmin(campaignId) {
     showToast("Đã gửi chiến dịch tới Quản trị viên để phê duyệt!", "success");
     refreshCampaignViews();
   } catch (error) {
-    console.warn("Backend submit fallback:", error);
-    const camp = getOrgCampaigns().find((c) => c.id === campaignId);
-    if (camp) {
-      upsertOrgCampaign({ ...camp, status: "PENDING", reason: null });
-      showToast("Chiến dịch đã chuyển sang trạng thái CHỜ ADMIN DUYỆT (PENDING)", "success");
-      refreshCampaignViews();
+    if (!error.response) {
+      const camp = getOrgCampaigns().find((c) => c.id === campaignId);
+      if (camp) {
+        upsertOrgCampaign({ ...camp, status: "PENDING", reason: null });
+        showToast("Chiến dịch đã chuyển sang trạng thái CHỜ ADMIN DUYỆT (cục bộ)", "success");
+        refreshCampaignViews();
+        return;
+      }
     }
+    const msg = Layout.extractApiErrorMessage(error, "Không thể gửi duyệt chiến dịch.");
+    showToast(msg, "error");
   }
 }
 
@@ -1253,15 +1279,21 @@ function setupAttendanceGenerator() {
   const genBtn = document.getElementById("btnGenerateAttendanceCode");
   if (!select) return;
 
-  const allCampaigns = DataStore.getCampaigns().filter(c => c.organization_id === currentOrg.id || c.organization_name === currentOrg.name);
-  select.innerHTML = allCampaigns.map(c => 
+  const allCampaigns = getOrgCampaigns();
+  select.innerHTML = allCampaigns.filter(c => ["OPEN", "CLOSED"].includes(c.status)).map(c => 
     `<option value="${c.id}">${escapeHtml(c.title)} (${c.status})</option>`
   ).join("");
 
   // Khi đổi chiến dịch → reload danh sách điểm danh từ DB
-  select.addEventListener("change", () => renderLiveAttendanceList());
+  if (!select.dataset.bound) {
+    select.dataset.bound = "1";
+    select.addEventListener("change", () => renderLiveAttendanceList());
+  }
 
-  if (genBtn) genBtn.addEventListener("click", generateAttendanceCode);
+  if (genBtn && !genBtn.dataset.bound) {
+    genBtn.dataset.bound = "1";
+    genBtn.addEventListener("click", generateAttendanceCode);
+  }
   renderLiveAttendanceList();
 }
 
@@ -1274,6 +1306,7 @@ function quickOpenAttendance(campaignId) {
 async function generateAttendanceCode() {
   const select = document.getElementById("codeGenCampaignSelect");
   const expiresSelect = document.getElementById("codeGenExpiresSelect");
+  const codeType = document.getElementById("codeGenTypeSelect")?.value || "CHECK_IN";
   const campaignId = parseInt(select.value);
   const expiresMinutes = parseInt(expiresSelect.value);
 
@@ -1282,9 +1315,9 @@ async function generateAttendanceCode() {
     return;
   }
 
-  const camp = getOrgCampaigns().find(c => c.id === campaignId && c.status === "OPEN");
+  const camp = getOrgCampaigns().find(c => c.id === campaignId && ["OPEN", "CLOSED"].includes(c.status));
   if (!camp) {
-    showToast("Chỉ có thể phát mã cho chiến dịch đã duyệt và đang mở (OPEN).", "warning");
+    showToast("Chỉ có thể phát mã cho chiến dịch đang hoạt động (OPEN/CLOSED).", "warning");
     return;
   }
 
@@ -1295,34 +1328,33 @@ async function generateAttendanceCode() {
     // 1. Gọi trực tiếp FastAPI Backend: POST /api/attendances/code
     const response = await api.post("/attendances/code", {
       campaign_id: campaignId,
-      expires_minutes: expiresMinutes
+      expires_minutes: expiresMinutes,
+      code_type: codeType
     });
 
     generatedCode = response.data.code;
     expiresAt = response.data.expires_at;
   } catch (error) {
-    console.warn("Lỗi sinh mã Backend, tạo mã bảo mật cục bộ:", error);
-
-    // Fallback sinh mã 6 ký tự ngẫu nhiên
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    generatedCode = "";
-    for (let i = 0; i < 6; i++) {
-      generatedCode += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    expiresAt = new Date(Date.now() + expiresMinutes * 60000).toISOString();
+    const msg = Layout.extractApiErrorMessage(error, "Không thể tạo mã điểm danh từ máy chủ.");
+    showToast(msg, "error");
+    return;
   }
 
   // Cập nhật chiến dịch
   camp.attendance_code = generatedCode;
   camp.attendance_code_expires_at = expiresAt;
+  camp.attendance_code_type = codeType;
   DataStore.saveCampaign(camp);
 
   // Hiển thị trên Projector Card & mở Kiosk Modal (Hướng 2)
-  displayLiveCode(generatedCode, new Date(expiresAt), camp.title);
+  // BE lưu datetime theo giờ Việt Nam nhưng response không kèm timezone.
+  const expiryWithTimezone = /(?:Z|[+-]\d{2}:\d{2})$/.test(expiresAt)
+    ? expiresAt : `${expiresAt}+07:00`;
+  displayLiveCode(generatedCode, new Date(expiryWithTimezone), `${camp.title} — ${codeType}`, codeType);
   openModal("attendanceCodeModal");
 }
 
-function displayLiveCode(code, expiresDate, campaignTitle) {
+function displayLiveCode(code, expiresDate, campaignTitle, codeType) {
   const projectorCard = document.getElementById("projectorCard");
   const codeEl = document.getElementById("liveDisplayCode");
   const timerEl = document.getElementById("liveDisplayTimer");
@@ -1344,7 +1376,16 @@ function displayLiveCode(code, expiresDate, campaignTitle) {
       : `<span>Còn lại: <strong>${Math.floor(diff / 60000)}m ${Math.floor((diff % 60000) / 1000)}s</strong> (Hết hạn: ${formatDateTime(expiresDate)})</span>`;
     if (timerEl) timerEl.innerHTML = html;
     if (kioskTimerEl) kioskTimerEl.innerHTML = html;
-    if (diff <= 0) clearInterval(codeCountdownInterval);
+    if (diff <= 0) {
+      clearInterval(codeCountdownInterval);
+      if (codeType === "CHECK_OUT") {
+        // Tác vụ BE chạy định kỳ (30s); tải lại trạng thái từ API sau một chu kỳ.
+        setTimeout(async () => {
+          await loadOrganizerCampaigns();
+          refreshCampaignViews();
+        }, 35000);
+      }
+    }
   };
 
   renderTimer();
@@ -1572,9 +1613,10 @@ async function renderVolunteerApplicants(forceRefresh = false) {
     if (refreshBtn) refreshBtn.classList.remove("is-spinning");
   }
 
-  orgRegistrationsCache = allRegs;
+  const regularRegs = allRegs.filter((r) => r.status !== "WAITLISTED");
+  orgRegistrationsCache = regularRegs;
   selectedPendingRegIds.clear();
-  updateVolunteerStatChips(allRegs);
+  updateVolunteerStatChips(regularRegs);
   applyVolunteerFilters();
 }
 
@@ -1652,11 +1694,7 @@ function applyVolunteerFilters() {
         </td>
         <td style="text-align: right;">
           <div class="btn-group-sm" style="justify-content: flex-end;">
-            ${isPending ? `
-              <button class="btn-action btn-action-primary" onclick="approveVolunteerRegistration(${r.id}, ${r.campaign_id})">✓ Duyệt</button>
-              <button class="btn-action btn-action-danger" onclick="openRejectRegistrationModal(${r.id}, ${r.campaign_id})">✕ Từ chối</button>
-            ` : ""}
-            <button class="btn-action" style="color: #64748b;" onclick="openRegistrationDetailModal(${r.id})">Chi tiết</button>
+            <button type="button" class="btn-action" style="color: #64748b;" onclick="openRegistrationDetailModal(${r.id})">Chi tiết</button>
           </div>
         </td>
       </tr>
@@ -1754,9 +1792,13 @@ async function approveVolunteerRegistration(regId, campaignId) {
     await api.patch(`/registrations/${regId}/approve?campaign_id=${campaignId}`);
     showToast("Đã duyệt tình nguyện viên tham gia chiến dịch!", "success");
   } catch (err) {
-    console.warn("Backend approve fallback:", err);
-    DataStore.updateRegistrationStatus(regId, "APPROVED");
-    showToast("Đã duyệt (lưu cục bộ).", "success");
+    if (!err.response) {
+      DataStore.updateRegistrationStatus(regId, "APPROVED");
+      showToast("Đã duyệt (lưu cục bộ).", "success");
+    } else {
+      showToast(Layout.extractApiErrorMessage(err, "Không thể duyệt đơn đăng ký."), "error");
+      return;
+    }
   }
   closeModal("registrationDetailModal");
   await loadOrganizerCampaigns();
@@ -1800,10 +1842,15 @@ async function confirmRejectVolunteerRegistration() {
     )
   );
   const okCount = results.filter((res) => res.status === "fulfilled").length;
+  const networkOnly = results.every((res) => res.status === "rejected" && !res.reason?.response);
 
-  if (okCount === 0) {
+  if (okCount === 0 && networkOnly) {
     targets.forEach(({ id: regId }) => DataStore.updateRegistrationStatus(regId, "REJECTED", reason));
     showToast(`Đã từ chối ${targets.length} đơn (lưu cục bộ).`, "warning");
+  } else if (okCount === 0) {
+    const firstErr = results.find((res) => res.status === "rejected")?.reason;
+    showToast(Layout.extractApiErrorMessage(firstErr, "Không thể từ chối đơn đăng ký."), "error");
+    return;
   } else if (targets.length === 1) {
     showToast("Đã từ chối đơn đăng ký.", "warning");
   } else {
@@ -1875,31 +1922,44 @@ async function loadCampaignWaitlist() {
   const tbody = document.getElementById("orgWaitlistTbody");
   if (!tbody) return;
   const campId = document.getElementById("volCampaignFilter")?.value || "";
-  if (!campId) {
-    tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #64748b; padding: 32px;">Hãy chọn một chiến dịch ở bộ lọc phía trên để xem Danh sách chờ.</td></tr>`;
+  const allCampaigns = getOrgCampaigns();
+  const campMap = new Map(allCampaigns.map((c) => [String(c.id), c]));
+  const targetIds = campId ? [campId] : allCampaigns.map((c) => c.id);
+
+  if (targetIds.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #94a3b8; padding: 32px;">Chưa có chiến dịch nào để xem danh sách chờ.</td></tr>`;
     return;
   }
 
   tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #94a3b8; padding: 28px;">Đang tải danh sách chờ...</td></tr>`;
   try {
-    const res = await api.get(`/waitlist/campaign/${campId}`);
-    const entries = Array.isArray(res.data) ? res.data : [];
+    const results = await Promise.all(
+      targetIds.map((id) =>
+        api.get(`/waitlist/campaign/${id}`)
+          .then((res) => (Array.isArray(res.data) ? res.data : []).map((e) => ({ ...e, _campaign_id: e.campaign_id || id })))
+          .catch(() => [])
+      )
+    );
+    const entries = results.flat();
     if (entries.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #94a3b8; padding: 32px;">Chưa có tình nguyện viên nào trong danh sách chờ của chiến dịch này.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #94a3b8; padding: 32px;">Chưa có tình nguyện viên nào trong danh sách chờ.</td></tr>`;
       return;
     }
-    const camp = getOrgCampaigns().find((c) => String(c.id) === String(campId));
-    tbody.innerHTML = entries.map((e, idx) => `
-      <tr>
-        <td>
-          <div class="td-title">#${idx + 1} · TNV #${e.user_id}</div>
-          <div class="td-subtitle">${escapeHtml(e.user_name || e.full_name || "")}</div>
-        </td>
-        <td>${escapeHtml(camp?.title || `Chiến dịch #${campId}`)}</td>
-        <td><span class="status-pill status-pending">${escapeHtml(e.status || "WAITING")}</span></td>
-        <td style="font-size: 13px;">${formatDateTime(e.created_at)}</td>
-      </tr>
-    `).join("");
+    tbody.innerHTML = entries.map((e, idx) => {
+      const cid = String(e._campaign_id || campId);
+      const camp = campMap.get(cid);
+      return `
+        <tr>
+          <td>
+            <div class="td-title">#${idx + 1} · TNV #${e.user_id}</div>
+            <div class="td-subtitle">${escapeHtml(e.user_name || e.full_name || "")}</div>
+          </td>
+          <td>${escapeHtml(camp?.title || `Chiến dịch #${cid}`)}</td>
+          <td><span class="status-pill status-pending">${escapeHtml(e.status || "WAITING")}</span></td>
+          <td style="font-size: 13px;">${formatDateTime(e.created_at)}</td>
+        </tr>
+      `;
+    }).join("");
   } catch (err) {
     const msg = Layout.extractApiErrorMessage(err, "Không thể tải danh sách chờ.");
     tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #b91c1c; padding: 32px;">${escapeHtml(msg)}</td></tr>`;
@@ -1911,16 +1971,16 @@ async function renderCertificatesAndClaims() {
   const orgClaimsTbody = document.getElementById("orgClaimsTbody");
   const orgIssuedCertsTbody = document.getElementById("orgIssuedCertsTbody");
 
-  // 1. Nạp danh sách khiếu nại giờ từ Backend (fallback DataStore)
+  // Hour claims always come from the server; local fallbacks must not fake approvals.
   let claims = [];
   try {
     const res = await api.get("/hour-claims");
-    if (Array.isArray(res.data)) {
-      claims = res.data;
-    }
+    if (Array.isArray(res.data)) claims = res.data;
   } catch (err) {
-    console.warn("Không thể tải /hour-claims, dùng DataStore:", err);
-    claims = DataStore.get(DataStore.STORAGE_KEYS.CLAIMS) || [];
+    if (orgClaimsTbody) {
+      orgClaimsTbody.innerHTML = `<tr><td colspan="4">${escapeHtml(Layout.extractApiErrorMessage(err, "Không thể tải yêu cầu giờ."))}</td></tr>`;
+    }
+    return;
   }
 
   if (orgClaimsTbody) {
@@ -1930,7 +1990,9 @@ async function renderCertificatesAndClaims() {
       orgClaimsTbody.innerHTML = claims.map(cl => {
         const volLabel = cl.user_name || `TNV #${cl.user_id || cl.registration_id}`;
         const campLabel = cl.campaign_title || `Đơn ĐK #${cl.registration_id}`;
-        const hoursVal = cl.claimed_hours ?? cl.actual_hours ?? 0;
+        const hoursVal = cl.claimed_hours ?? 0;
+        const actualHours = Number(cl.actual_hours ?? 0);
+        const displayHours = cl.status === "VERIFIED" ? (cl.approved_hours ?? 0) : hoursVal;
         const noteText = cl.note ? `<div class="td-subtitle">${escapeHtml(cl.note)}</div>` : "";
         return `
           <tr>
@@ -1939,14 +2001,14 @@ async function renderCertificatesAndClaims() {
               <div class="td-subtitle">${escapeHtml(campLabel)}</div>
               ${noteText}
             </td>
-            <td><strong>+${hoursVal} giờ</strong></td>
+            <td><strong>${escapeHtml(String(displayHours))} giờ</strong><div class="td-subtitle">Điểm danh: ${actualHours}h · Đề nghị: ${escapeHtml(String(hoursVal))}h</div></td>
             <td>
               ${cl.evidence_url ? `<a href="${escapeHtml(cl.evidence_url)}" target="_blank" rel="noopener noreferrer" style="color: var(--primary); font-size: 12px; font-weight: 600;">Xem minh chứng ↗</a>` : "—"}
             </td>
             <td style="text-align: right;">
               ${cl.status === "PENDING" ? `
                 <div class="btn-group-sm" style="justify-content: flex-end;">
-                  <button type="button" class="btn-action btn-action-primary" onclick="verifyHourClaim(${cl.id}, ${Number(hoursVal)})">Xác nhận</button>
+                  <button type="button" class="btn-action btn-action-primary" onclick="verifyHourClaim(${cl.id}, ${Math.min(Number(hoursVal), actualHours)})">Xác nhận</button>
                   <button type="button" class="btn-action btn-action-danger" onclick="rejectHourClaim(${cl.id})">Từ chối</button>
                 </div>
               ` : `<span class="status-pill status-${String(cl.status).toLowerCase()}">${escapeHtml(cl.status)}</span>`}
@@ -1984,25 +2046,18 @@ async function renderCertificatesAndClaims() {
 
 async function verifyHourClaim(claimId, approvedHours) {
   try {
-    const payload = { status: "VERIFIED" };
-    if (approvedHours && approvedHours > 0) payload.approved_hours = approvedHours;
-    await api.patch(`/hour-claims/${claimId}/review`, payload);
-    showToast("Đã xác nhận cộng giờ cống hiến cho tình nguyện viên!", "success");
+    if (!(approvedHours > 0)) {
+      showToast("Không có số giờ điểm danh hợp lệ để xác minh.", "error");
+      return;
+    }
+    await api.patch(`/hour-claims/${claimId}/review`, {
+      status: "VERIFIED", approved_hours: approvedHours
+    });
+    showToast("Đã xác minh giờ tình nguyện.", "success");
     await renderCertificatesAndClaims();
     loadOrganizerStats();
-    return;
   } catch (err) {
-    console.warn("Fallback DataStore cho verifyHourClaim:", err);
-  }
-
-  const claims = DataStore.get(DataStore.STORAGE_KEYS.CLAIMS) || [];
-  const cl = claims.find(c => c.id === claimId);
-  if (cl) {
-    cl.status = "VERIFIED";
-    cl.verified_by = currentUser.id;
-    DataStore.set(DataStore.STORAGE_KEYS.CLAIMS, claims);
-    showToast("Đã xác nhận cộng giờ cống hiến (cục bộ)!", "success");
-    renderCertificatesAndClaims();
+    showToast(Layout.extractApiErrorMessage(err, "Không thể xác minh giờ."), "error");
   }
 }
 
@@ -2022,80 +2077,144 @@ async function confirmRejectHourClaim() {
   if (!pendingRejectClaimId) return;
   const claimId = pendingRejectClaimId;
   const input = document.getElementById("rejectClaimReasonInput");
-  const reason = (input?.value || "").trim() || "Không đạt điều kiện xác nhận";
+  const reason = (input?.value || "").trim();
+  if (!reason) {
+    showToast("Cần nhập lý do từ chối.", "warning");
+    return;
+  }
   const btn = document.getElementById("confirmRejectClaimBtn");
   if (btn) btn.disabled = true;
-
   try {
     await api.patch(`/hour-claims/${claimId}/review`, {
-      status: "REJECTED",
-      rejection_reason: reason
+      status: "REJECTED", rejection_reason: reason
     });
     closeModal("rejectClaimModal");
     pendingRejectClaimId = null;
-    showToast("Đã từ chối yêu cầu khiếu nại giờ.", "warning");
+    showToast("Đã từ chối yêu cầu xác minh giờ.", "warning");
     await renderCertificatesAndClaims();
-    return;
   } catch (err) {
-    console.warn("Fallback DataStore cho rejectHourClaim:", err);
+    showToast(Layout.extractApiErrorMessage(err, "Không thể từ chối yêu cầu."), "error");
   } finally {
     if (btn) btn.disabled = false;
   }
+}
 
-  const claims = DataStore.get(DataStore.STORAGE_KEYS.CLAIMS) || [];
-  const cl = claims.find(c => c.id === claimId);
-  if (cl) {
-    cl.status = "REJECTED";
-    DataStore.set(DataStore.STORAGE_KEYS.CLAIMS, claims);
-    closeModal("rejectClaimModal");
-    pendingRejectClaimId = null;
-    showToast("Đã từ chối khiếu nại giờ (cục bộ).", "warning");
-    renderCertificatesAndClaims();
+let eligibleCertRecipients = [];
+
+function renderCertVolunteerOptions(campaignId) {
+  const volSelect = document.getElementById("certVolunteerSelect");
+  const hoursInput = document.getElementById("certHoursInput");
+  if (!volSelect) return;
+  const matches = eligibleCertRecipients.filter((r) => String(r.campaign_id) === String(campaignId));
+  if (matches.length === 0) {
+    volSelect.innerHTML = `<option value="">Không có TNV đủ điều kiện</option>`;
+    if (hoursInput) hoursInput.value = "";
+    return;
   }
+  volSelect.innerHTML = matches
+    .map((u) => `<option value="${u.user_id}">${escapeHtml(u.user_name || `TNV #${u.user_id}`)} — ${Number(u.approved_hours).toFixed(2)} giờ</option>`)
+    .join("");
+  syncCertificateApprovedHours();
 }
 
-function openIssueCertModal() {
+function syncCertificateApprovedHours() {
+  const campaignId = document.getElementById("certCampaignSelect")?.value;
+  const userId = document.getElementById("certVolunteerSelect")?.value;
+  const hoursInput = document.getElementById("certHoursInput");
+  const selected = eligibleCertRecipients.find((r) =>
+    String(r.campaign_id) === String(campaignId) && String(r.user_id) === String(userId));
+  if (hoursInput) hoursInput.value = selected ? Number(selected.approved_hours).toFixed(2) : "";
+}
+
+async function openIssueCertModal() {
   const campSelect = document.getElementById("certCampaignSelect");
   const volSelect = document.getElementById("certVolunteerSelect");
+  const submitBtn = document.querySelector("#issueCertModal .btn-primary");
+  if (!campSelect || !volSelect) return;
 
-  const myCampaigns = DataStore.getCampaigns().filter(c => c.organization_id === currentOrg.id || c.organization_name === currentOrg.name);
-  const myUsers = DataStore.getUsers().filter(u => u.role === "USER");
-
-  campSelect.innerHTML = myCampaigns.map(c => `<option value="${c.id}">${escapeHtml(c.title)}</option>`).join("");
-  volSelect.innerHTML = myUsers.map(u => `<option value="${u.id}">${escapeHtml(u.full_name)} (${u.email})</option>`).join("");
-
+  campSelect.innerHTML = `<option value="">Đang tải dữ liệu...</option>`;
+  volSelect.innerHTML = `<option value="">Đang tải dữ liệu...</option>`;
+  if (submitBtn) submitBtn.disabled = true;
   openModal("issueCertModal");
+
+  try {
+    const res = await api.get("/certificates/eligible");
+    eligibleCertRecipients = Array.isArray(res.data) ? res.data : [];
+  } catch (err) {
+    eligibleCertRecipients = [];
+    campSelect.innerHTML = `<option value="">Không thể tải danh sách</option>`;
+    volSelect.innerHTML = `<option value="">Không có dữ liệu</option>`;
+    showToast(Layout.extractApiErrorMessage(err, "Không thể tải danh sách TNV đủ điều kiện."), "error");
+    return;
+  }
+
+  if (eligibleCertRecipients.length === 0) {
+    campSelect.innerHTML = `<option value="">Chưa có chiến dịch/TNV đủ điều kiện</option>`;
+    volSelect.innerHTML = `<option value="">Tất cả TNV đã được cấp chứng chỉ hoặc chưa có TNV được duyệt</option>`;
+    return;
+  }
+
+  const campaignMap = new Map();
+  eligibleCertRecipients.forEach((item) => {
+    if (!campaignMap.has(item.campaign_id)) {
+      campaignMap.set(item.campaign_id, item.campaign_title || `Chiến dịch #${item.campaign_id}`);
+    }
+  });
+
+  campSelect.innerHTML = Array.from(campaignMap.entries())
+    .map(([id, title]) => `<option value="${id}">${escapeHtml(title)}</option>`)
+    .join("");
+
+  if (!campSelect.dataset.bound) {
+    campSelect.dataset.bound = "1";
+    campSelect.addEventListener("change", () => renderCertVolunteerOptions(campSelect.value));
+  }
+
+  if (!volSelect.dataset.bound) {
+    volSelect.dataset.bound = "1";
+    volSelect.addEventListener("change", syncCertificateApprovedHours);
+  }
+  renderCertVolunteerOptions(campSelect.value);
+  if (submitBtn) submitBtn.disabled = false;
 }
 
-function submitIssueCertificate() {
+async function submitIssueCertificate() {
   const campSelect = document.getElementById("certCampaignSelect");
   const volSelect = document.getElementById("certVolunteerSelect");
-  const hours = parseFloat(document.getElementById("certHoursInput").value);
+  const hoursInput = document.getElementById("certHoursInput");
+  const submitBtn = document.querySelector("#issueCertModal .btn-primary");
 
-  const campaignId = parseInt(campSelect.value);
-  const userId = parseInt(volSelect.value);
-  const camp = DataStore.getCampaigns().find(c => c.id === campaignId);
+  const campaignId = parseInt(campSelect?.value, 10);
+  const userId = parseInt(volSelect?.value, 10);
+  const eligible = eligibleCertRecipients.find((r) =>
+    String(r.campaign_id) === String(campaignId) && String(r.user_id) === String(userId));
+  const hours = eligible ? Number(eligible.approved_hours) : NaN;
 
-  const certs = DataStore.getCertificates();
-  const certNumber = Math.floor(1000 + Math.random() * 9000);
-  const newCert = {
-    id: Date.now(),
-    certificate_code: `VL-2026-CERT${certNumber}`,
-    user_id: userId,
-    campaign_id: campaignId,
-    campaign_title: camp ? camp.title : "Chiến dịch tình nguyện",
-    total_hours: hours,
-    issued_at: new Date().toISOString(),
-    status: "ACTIVE",
-    revoked_reason: null
-  };
+  if (!campaignId || !userId) {
+    showToast("Vui lòng chọn chiến dịch và tình nguyện viên hợp lệ.", "error");
+    return;
+  }
+  if (!eligible || !Number.isFinite(hours) || hours <= 0) {
+    showToast("Tổng số giờ công nhận phải lớn hơn 0.", "error");
+    return;
+  }
 
-  certs.unshift(newCert);
-  DataStore.set(DataStore.STORAGE_KEYS.CERTIFICATES, certs);
-
-  closeModal("issueCertModal");
-  showToast(`Đã phát hành chứng chỉ: ${newCert.certificate_code}`, "success");
-  renderCertificatesAndClaims();
+  if (submitBtn) submitBtn.disabled = true;
+  try {
+    const res = await api.post("/certificates", {
+      campaign_id: campaignId,
+      user_id: userId,
+      total_hours: hours,
+    });
+    const issued = res.data;
+    closeModal("issueCertModal");
+    showToast(`Đã phát hành chứng chỉ: ${issued.certificate_code}`, "success");
+    await renderCertificatesAndClaims();
+  } catch (err) {
+    showToast(Layout.extractApiErrorMessage(err, "Không thể phát hành chứng chỉ."), "error");
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
+  }
 }
 
 // ================= TAB 6: HỒ SƠ TỔ CHỨC =================
@@ -2145,12 +2264,37 @@ function setupOrgProfileForm() {
   }
 }
 
-function saveOrgProfile() {
-  currentOrg.name = document.getElementById("orgFormName").value.trim();
-  currentOrg.phone = document.getElementById("orgFormPhone").value.trim();
-  currentOrg.address = document.getElementById("orgFormAddress").value.trim();
-  currentOrg.document_url = document.getElementById("orgFormDocUrl").value.trim();
-  currentOrg.description = document.getElementById("orgFormDesc").value.trim();
+async function saveOrgProfile() {
+  const name = document.getElementById("orgFormName").value.trim();
+  const email = document.getElementById("orgFormEmail").value.trim();
+  const phone = document.getElementById("orgFormPhone").value.trim();
+  const address = document.getElementById("orgFormAddress").value.trim();
+  const documentUrl = document.getElementById("orgFormDocUrl").value.trim();
+  const description = document.getElementById("orgFormDesc").value.trim();
+
+  if (!name || !email || !phone) {
+    showToast("Vui lòng nhập đầy đủ Tên, Email và Số điện thoại tổ chức.", "error");
+    return;
+  }
+
+  const payload = {
+    name,
+    email,
+    phone,
+    address: address || null,
+    document_url: documentUrl || null,
+    description: description || null,
+  };
+
+  try {
+    const res = await api.put("/organizations/me", payload);
+    if (res.data) {
+      currentOrg = { ...currentOrg, ...res.data };
+    }
+  } catch (err) {
+    showToast(Layout.extractApiErrorMessage(err, "Không thể cập nhật hồ sơ tổ chức."), "error");
+    return;
+  }
 
   const orgs = DataStore.getOrganizations();
   const index = orgs.findIndex(o => o.id === currentOrg.id);
@@ -2159,6 +2303,7 @@ function saveOrgProfile() {
     DataStore.set(DataStore.STORAGE_KEYS.ORGS, orgs);
   }
 
+  renderOrgStatusBanner();
   setupOrganizerHeader();
   showToast("Đã lưu thông tin hồ sơ tổ chức!", "success");
 }
@@ -2180,3 +2325,50 @@ function closeModal(modalId) {
   }
 }
 
+
+/* Khiếu nại điểm danh: API thật, không fallback dữ liệu mẫu. */
+async function loadOrganizerAttendanceAppeals() {
+  const panel = document.getElementById("organizerAttendanceAppeals");
+  if (!panel) return;
+  panel.textContent = "Đang tải khiếu nại điểm danh...";
+  try {
+    const res = await api.get("/attendance-appeals/organizer");
+    const appeals = Array.isArray(res.data) ? res.data : [];
+    panel.innerHTML = appeals.length ? appeals.map(a => `
+      <div style="border-bottom:1px solid #ddd;padding:12px 0;">
+        <div><strong>Đơn #${Number(a.registration_id)}</strong> — ${escapeHtml(a.status)}</div>
+        <div>${escapeHtml(a.reason)}</div>
+        ${a.evidence_url ? `<div>Bằng chứng: ${escapeHtml(a.evidence_url)}</div>` : ""}
+        ${a.review_note ? `<div>Phản hồi: ${escapeHtml(a.review_note)}</div>` : ""}
+        ${a.status === "PENDING" ? `<div class="ud-btn-row">
+          <button type="button" class="btn btn-primary btn-sm" onclick="reviewAttendanceAppeal(${Number(a.id)}, 'ACCEPTED')">Chấp nhận</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="reviewAttendanceAppeal(${Number(a.id)}, 'REJECTED')">Từ chối</button>
+        </div>` : ""}
+      </div>`).join("") : "Không có khiếu nại điểm danh.";
+  } catch (err) { panel.textContent = Layout.extractApiErrorMessage(err, "Không thể tải khiếu nại điểm danh."); }
+}
+
+async function reviewAttendanceAppeal(id, decision) {
+  const reviewNote = prompt("Ghi rõ lý do xử lý khiếu nại:");
+  if (!reviewNote || reviewNote.trim().length < 3) return;
+  const body = {decision, review_note: reviewNote.trim()};
+  if (decision === "ACCEPTED") {
+    const input = prompt("Giờ CHECK-IN xác nhận (YYYY-MM-DDTHH:MM), để trống nếu đã có trong hệ thống:");
+    if (input === null) return;
+    const output = prompt("Giờ CHECK-OUT xác nhận (YYYY-MM-DDTHH:MM), để trống nếu đã có trong hệ thống:");
+    if (output === null) return;
+    if (input.trim()) body.check_in_at = input.trim();
+    if (output.trim()) body.check_out_at = output.trim();
+  }
+  try {
+    await api.patch(`/attendance-appeals/${id}/review`, body);
+    showToast("Đã xử lý khiếu nại điểm danh.", "success");
+    await loadOrganizerAttendanceAppeals();
+    if (typeof renderLiveAttendanceList === "function") await renderLiveAttendanceList();
+  } catch (err) { showToast(Layout.extractApiErrorMessage(err, "Không xử lý được khiếu nại."), "error"); }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("refreshAttendanceAppeals")?.addEventListener("click", loadOrganizerAttendanceAppeals);
+  loadOrganizerAttendanceAppeals();
+});

@@ -75,7 +75,138 @@ function updateRegisterButtonState(campaign, remainingSlots) {
   }
 }
 
-function renderCampaignDetail(campaign) {
+function renderOrganizerSidebar(campaign) {
+  const card = document.querySelector(".registration-card");
+  if (!card) return;
+
+  const titleEl = card.querySelector("h3");
+  if (titleEl) titleEl.textContent = "Quản lý chiến dịch";
+
+  const registerBtn = document.getElementById("btn-register-campaign");
+  if (registerBtn) registerBtn.style.display = "none";
+
+  let actionsWrap = document.getElementById("org-detail-actions");
+  if (!actionsWrap) {
+    actionsWrap = document.createElement("div");
+    actionsWrap.id = "org-detail-actions";
+    actionsWrap.style.cssText = "display: flex; flex-direction: column; gap: 10px; margin-top: 14px;";
+    card.appendChild(actionsWrap);
+  }
+
+  const id = campaign.id;
+  const st = campaign.status;
+  let html = "";
+
+  if (st === "DRAFT") {
+    html += `<button type="button" class="btn btn-primary btn-block" id="orgDetailSubmitBtn">Gửi duyệt Admin</button>`;
+  }
+  if (st === "PENDING") {
+    html += `<div style="padding: 10px 12px; border-radius: 10px; background: #fffbeb; border: 1px solid #fde68a; color: #b45309; font-size: 0.85rem;">Chiến dịch đang chờ Quản trị viên phê duyệt.</div>`;
+  }
+  if (st === "OPEN") {
+    html += `<a href="organizer-dashboard.html?tab=attendance&campaign_id=${id}" class="btn btn-primary btn-block" style="text-align:center;">Mở Trạm Điểm danh</a>`;
+  }
+  if (["OPEN", "CLOSED", "COMPLETED"].includes(st)) {
+    html += `<a href="organizer-dashboard.html?tab=volunteers&campaign_id=${id}" class="btn btn-outline btn-block" style="text-align:center;">Xem &amp; Duyệt đơn TNV</a>`;
+  }
+  if (st === "COMPLETED" || st === "CLOSED") {
+    html += `<a href="organizer-dashboard.html?tab=certificates" class="btn btn-outline btn-block" style="text-align:center;">Cấp chứng chỉ</a>`;
+  }
+  if (!["COMPLETED", "CANCELLED"].includes(st)) {
+    html += `<button type="button" class="btn btn-outline btn-block" id="orgDetailCancelBtn" style="color: #b91c1c; border-color: #fecaca;">Hủy chiến dịch</button>`;
+  }
+  html += `<a href="organizer-dashboard.html?tab=campaigns" class="btn btn-outline btn-block" style="text-align:center;">← Quay lại Quản lý chiến dịch</a>`;
+
+  actionsWrap.innerHTML = html;
+
+  const submitBtn = document.getElementById("orgDetailSubmitBtn");
+  if (submitBtn) {
+    submitBtn.addEventListener("click", async () => {
+      submitBtn.disabled = true;
+      try {
+        await api.post(`/campaigns/${id}/submit`);
+        if (typeof showToast === "function") showToast("Đã gửi chiến dịch tới Quản trị viên phê duyệt!", "success");
+        await loadCampaignDetail();
+      } catch (err) {
+        if (typeof showToast === "function") showToast(Layout.extractApiErrorMessage(err, "Không thể gửi duyệt."), "error");
+        submitBtn.disabled = false;
+      }
+    });
+  }
+
+  const cancelBtn = document.getElementById("orgDetailCancelBtn");
+  if (cancelBtn) {
+    cancelBtn.addEventListener("click", async () => {
+      const reason = window.prompt("Nhập lý do hủy chiến dịch:", st === "DRAFT" ? "Hủy bản nháp" : "");
+      if (reason === null) return;
+      const trimmed = reason.trim();
+      if (!trimmed) {
+        if (typeof showToast === "function") showToast("Vui lòng nhập lý do hủy chiến dịch.", "warning");
+        return;
+      }
+      cancelBtn.disabled = true;
+      try {
+        await api.patch(`/campaigns/${id}/cancel`, { reason: trimmed });
+        if (typeof showToast === "function") showToast("Đã hủy chiến dịch.", "success");
+        await loadCampaignDetail();
+      } catch (err) {
+        if (typeof showToast === "function") showToast(Layout.extractApiErrorMessage(err, "Không thể hủy chiến dịch."), "error");
+        cancelBtn.disabled = false;
+      }
+    });
+  }
+}
+
+function renderReasonAlert(campaign) {
+  let box = document.getElementById("detail-reason-box");
+  if (!campaign.reason) {
+    if (box) box.remove();
+    return;
+  }
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "detail-reason-box";
+    box.style.cssText = "margin: 16px 0; padding: 12px 16px; border-radius: 10px; background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; font-size: 0.92rem;";
+    const grid = document.querySelector(".detail-info-grid");
+    if (grid && grid.parentNode) {
+      grid.parentNode.insertBefore(box, grid.nextSibling);
+    }
+  }
+  box.innerHTML = `<strong>${campaign.status === "CANCELLED" ? "Lý do hủy:" : "Góp ý / Lý do từ chối:"}</strong> ${escapeHtml(campaign.reason)}`;
+}
+
+function renderReadOnlySidebar(campaign) {
+  const card = document.querySelector(".registration-card");
+  if (!card) return;
+
+  const titleEl = card.querySelector("h3");
+  if (titleEl) titleEl.textContent = "Thông tin chiến dịch";
+
+  const registerBtn = document.getElementById("btn-register-campaign");
+  if (registerBtn) registerBtn.style.display = "none";
+
+  let actionsWrap = document.getElementById("org-detail-actions");
+  if (!actionsWrap) {
+    actionsWrap = document.createElement("div");
+    actionsWrap.id = "org-detail-actions";
+    actionsWrap.style.cssText = "margin-top: 14px;";
+    card.appendChild(actionsWrap);
+  }
+
+  const statusInfo = Layout.CAMPAIGN_DETAIL_STATUS_MAP[campaign?.status] || {
+    label: campaign?.status || "Đang cập nhật",
+    cls: "badge-primary",
+  };
+
+  actionsWrap.innerHTML = `
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border-radius: 10px; background: #f8fafc; border: 1px solid #e2e8f0;">
+      <span style="font-size: 0.86rem; color: #64748b; font-weight: 500;">Trạng thái</span>
+      <span class="badge ${escapeHtml(statusInfo.cls)}">${escapeHtml(statusInfo.label)}</span>
+    </div>
+  `;
+}
+
+function renderCampaignDetail(campaign, options = {}) {
   currentCampaign = campaign;
 
   const statusBox = document.getElementById("detail-status-box");
@@ -142,7 +273,22 @@ function renderCampaignDetail(campaign) {
     detailProgressFill.style.width = `${percent}%`;
   }
 
-  updateRegisterButtonState(campaign, remainingSlots);
+  renderReasonAlert(campaign);
+
+  const viewerRole = typeof Auth !== "undefined" ? Auth.getUser()?.role : null;
+  if (options.isOwnedOrganizer) {
+    renderOrganizerSidebar(campaign);
+  } else if (viewerRole === "ORGANIZER" || viewerRole === "ADMIN") {
+    renderReadOnlySidebar(campaign);
+  } else {
+    const actionsWrap = document.getElementById("org-detail-actions");
+    if (actionsWrap) actionsWrap.remove();
+    const titleEl = document.querySelector(".registration-card h3");
+    if (titleEl) titleEl.textContent = "Tham Gia Chiến Dịch";
+    const registerBtn = document.getElementById("btn-register-campaign");
+    if (registerBtn) registerBtn.style.display = "";
+    updateRegisterButtonState(campaign, remainingSlots);
+  }
 }
 
 async function loadCampaignDetail() {
@@ -153,6 +299,32 @@ async function loadCampaignDetail() {
   }
 
   showDetailLoading();
+
+  const currentUser = typeof Auth !== "undefined" ? Auth.getUser() : null;
+  if (currentUser?.role === "ORGANIZER") {
+    try {
+      const [mineRes, orgRes] = await Promise.all([
+        api.get("/campaigns/mine"),
+        api.get("/organizations/me").catch(() => null),
+      ]);
+      const mineList = Array.isArray(mineRes.data) ? mineRes.data : [];
+      const found = mineList.find((c) => String(c.id) === String(campaignId));
+      if (found) {
+        const approved = Number(found.registered_count || 0);
+        const maxPart = Number(found.max_participants || 0);
+        const normalized = {
+          ...found,
+          approved_count: approved,
+          remaining_slots: Math.max(maxPart - approved, 0),
+          organization: orgRes?.data || { name: currentUser.full_name || "Tổ chức của bạn" },
+        };
+        renderCampaignDetail(normalized, { isOwnedOrganizer: true });
+        return;
+      }
+    } catch {
+      // Fallback sang endpoint công khai nếu /campaigns/mine lỗi
+    }
+  }
 
   try {
     const response = await api.get(`/campaigns/${encodeURIComponent(campaignId)}`);

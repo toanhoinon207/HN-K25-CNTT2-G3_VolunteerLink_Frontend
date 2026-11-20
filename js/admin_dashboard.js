@@ -346,22 +346,95 @@ function openOrgDetailModal(orgId) {
   const org = allOrganizations.find((o) => o.id === orgId);
   if (!org) return;
   const body = document.getElementById("orgDetailBody");
+  const footer = document.getElementById("orgDetailFooter");
   if (!body) return;
+
+  const statusMap = {
+    PENDING: { label: "Chờ duyệt", cls: "status-pending" },
+    APPROVED: { label: "Đã duyệt", cls: "status-approved" },
+    REJECTED: { label: "Từ chối", cls: "status-rejected" },
+  };
+  const st = statusMap[org.status] || { label: org.status || "—", cls: "status-pending" };
+  const initialChar = escapeHtml((org.name || "O").trim().charAt(0).toUpperCase());
+  const logoHtml = isSafeHttpUrl(org.logo_url)
+    ? `<img src="${escapeHtml(org.logo_url)}" alt="${escapeHtml(org.name)}" style="width:48px;height:48px;border-radius:12px;object-fit:cover;border:1px solid var(--border);flex-shrink:0;">`
+    : `<div style="width:48px;height:48px;border-radius:12px;background:var(--primary-light,#eff6ff);color:var(--primary,#1d4ed8);display:grid;place-items:center;font-weight:700;font-size:1.15rem;flex-shrink:0;">${initialChar}</div>`;
+
   const docHtml = isSafeHttpUrl(org.document_url)
-    ? `<a href="${escapeHtml(org.document_url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(org.document_url)}</a>`
-    : "Không có";
+    ? `<a href="${escapeHtml(org.document_url)}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm" style="display:inline-flex;align-items:center;gap:6px;">Xem tài liệu pháp lý ↗</a>`
+    : `<span style="color:#b45309;font-weight:600;">Chưa cung cấp tài liệu minh chứng</span>`;
+
+  const ownerStatusBadge = org.owner_status
+    ? `<span style="font-size:0.75rem;padding:2px 8px;border-radius:999px;background:${org.owner_status === "ACTIVE" ? "#ecfdf5" : "#fef2f2"};color:${org.owner_status === "ACTIVE" ? "#047857" : "#b91c1c"};font-weight:600;">${escapeHtml(org.owner_status)}</span>`
+    : "";
+
+  const formatTime = (val) => (typeof formatDateTime === "function" && val ? formatDateTime(val) : (val || "--"));
 
   body.innerHTML = `
-    <div style="display:grid;gap:10px;font-size:0.92rem;">
-      <div><strong>Tên tổ chức:</strong> ${escapeHtml(org.name)}</div>
-      <div><strong>Email:</strong> ${escapeHtml(org.email)}</div>
-      <div><strong>Số điện thoại:</strong> ${escapeHtml(org.phone || "--")}</div>
-      <div><strong>Địa chỉ:</strong> ${escapeHtml(org.address || "--")}</div>
-      <div><strong>Tài liệu minh chứng:</strong> ${docHtml}</div>
-      <div><strong>Mô tả:</strong> ${escapeHtml(org.description || "Chưa có mô tả")}</div>
-      ${org.rejection_reason ? `<div style="color:var(--danger);"><strong>Lý do từ chối gần nhất:</strong> ${escapeHtml(org.rejection_reason)}</div>` : ""}
+    <div style="display:flex;flex-direction:column;gap:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:14px;border-bottom:1px solid var(--border);">
+        <div style="display:flex;align-items:center;gap:12px;min-width:0;">
+          ${logoHtml}
+          <div style="min-width:0;">
+            <div style="font-size:1.05rem;font-weight:700;color:var(--text-main);">${escapeHtml(org.name)}</div>
+            <div style="font-size:0.8rem;color:var(--text-muted);">Mã hồ sơ: #ORG-${Number(org.id)} · Nộp lúc: ${escapeHtml(formatTime(org.created_at))}</div>
+          </div>
+        </div>
+        <span class="status-pill ${st.cls}"><span class="status-dot"></span> ${st.label}</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">
+        <div style="padding:12px 14px;border-radius:12px;background:var(--surface-alt,#f8fafc);border:1px solid var(--border);">
+          <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;">Người đại diện tài khoản</div>
+          <div style="display:grid;gap:6px;font-size:0.86rem;">
+            <div><strong>Họ tên:</strong> ${escapeHtml(org.owner_name || `User #${org.owner_id || "--"}`)} ${ownerStatusBadge}</div>
+            <div><strong>Email TK:</strong> ${escapeHtml(org.owner_email || "--")}</div>
+            <div><strong>SĐT TK:</strong> ${escapeHtml(org.owner_phone || "--")}</div>
+          </div>
+        </div>
+
+        <div style="padding:12px 14px;border-radius:12px;background:var(--surface-alt,#f8fafc);border:1px solid var(--border);">
+          <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;">Thông tin liên hệ tổ chức</div>
+          <div style="display:grid;gap:6px;font-size:0.86rem;">
+            <div><strong>Email TC:</strong> ${escapeHtml(org.email || "--")}</div>
+            <div><strong>SĐT TC:</strong> ${escapeHtml(org.phone || "--")}</div>
+            <div><strong>Địa chỉ:</strong> ${escapeHtml(org.address || "--")}</div>
+            <div><strong>Cập nhật:</strong> ${escapeHtml(formatTime(org.updated_at))}</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="padding:12px 14px;border-radius:12px;background:#ffffff;border:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+        <div style="font-size:0.86rem;">
+          <strong>Tài liệu pháp lý / Minh chứng:</strong>
+          <div style="font-size:0.78rem;color:var(--text-muted);word-break:break-all;">${isSafeHttpUrl(org.document_url) ? escapeHtml(org.document_url) : "Tổ chức chưa đính kèm đường dẫn hồ sơ."}</div>
+        </div>
+        <div>${docHtml}</div>
+      </div>
+
+      <div style="font-size:0.88rem;">
+        <strong style="display:block;margin-bottom:6px;">Giới thiệu &amp; Mục tiêu hoạt động:</strong>
+        <div style="padding:10px 12px;border-radius:10px;background:var(--surface-alt,#f8fafc);border:1px solid var(--border);line-height:1.55;white-space:pre-line;">${escapeHtml(org.description || "Chưa có mô tả")}</div>
+      </div>
+
+      ${org.rejection_reason ? `
+        <div style="padding:10px 12px;border-radius:10px;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;font-size:0.86rem;">
+          <strong>Lý do từ chối gần nhất:</strong> ${escapeHtml(org.rejection_reason)}
+        </div>
+      ` : ""}
     </div>
   `;
+
+  if (footer) {
+    footer.innerHTML = org.status === "PENDING"
+      ? `
+        <button type="button" class="btn btn-outline" onclick="closeModal('orgDetailModal')">Đóng</button>
+        <button type="button" class="btn btn-outline" style="color:var(--danger);border-color:#fecaca;" onclick="closeModal('orgDetailModal'); openRejectOrgModal(${Number(org.id)})">Từ chối</button>
+        <button type="button" class="btn btn-primary" onclick="approveOrganization(${Number(org.id)}).then(() => closeModal('orgDetailModal'))">✓ Phê duyệt</button>
+      `
+      : `<button type="button" class="btn btn-outline" onclick="closeModal('orgDetailModal')">Đóng</button>`;
+  }
+
   openModal("orgDetailModal");
 }
 
