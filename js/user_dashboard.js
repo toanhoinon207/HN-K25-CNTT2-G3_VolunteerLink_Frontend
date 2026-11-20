@@ -64,6 +64,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     Layout.initNotificationBell(currentUser.role || "USER");
   }
   setupAttendanceActions();
+  setupAttendanceAppeals();
   setupProfilePreview();
 
   const logoutBtn = document.getElementById("logoutBtn");
@@ -81,6 +82,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   await loadMyRegistrations();
   await Promise.allSettled([
     loadMyAttendanceHistory(),
+    loadMyAttendanceAppeals(),
     loadCertificates(),
     loadHourClaims(),
     loadProfile(),
@@ -268,6 +270,13 @@ function populateCampaignSelects(registrations) {
         .map((r) => `<option value="${r.campaign_id}">${escapeHtml(r.campaign_title)}</option>`)
         .join("");
     }
+  }
+
+  const appealSelect = document.getElementById("attendanceAppealCampaign");
+  if (appealSelect) {
+    appealSelect.innerHTML = approvedRegs.length ? approvedRegs.map(r =>
+      `<option value="${Number(r.id)}">${escapeHtml(r.campaign_title || `Chiến dịch #${r.campaign_id}`)}</option>`
+    ).join("") : `<option value="">Chưa có đơn tham gia đã duyệt</option>`;
   }
 
   const claimSelect = document.getElementById("claimCampaignSelect");
@@ -743,5 +752,42 @@ async function submitOrganizerApplication() {
       btn.disabled = false;
       btn.textContent = currentMyOrg?.status === "REJECTED" ? "Gửi lại hồ sơ xét duyệt" : "Gửi hồ sơ xét duyệt";
     }
+  }
+}
+
+/* ==================== KHIẾU NẠI ĐIỂM DANH ==================== */
+function setupAttendanceAppeals() {
+  const form = document.getElementById("attendanceAppealForm");
+  if (!form) return;
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const registrationId = Number(document.getElementById("attendanceAppealCampaign")?.value);
+    const reason = document.getElementById("attendanceAppealReason")?.value.trim() || "";
+    const evidence = document.getElementById("attendanceAppealEvidence")?.value.trim() || "";
+    if (!registrationId || reason.length < 10) { showToast("Chọn đơn và nhập lý do tối thiểu 10 ký tự.", "warning"); return; }
+    const btn = form.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    try {
+      await api.post("/attendance-appeals", {registration_id: registrationId, reason, evidence_url: evidence || null});
+      showToast("Đã gửi khiếu nại điểm danh.", "success");
+      form.reset();
+      await loadMyAttendanceAppeals();
+    } catch (error) {
+      showToast(extractApiError(error, "Không gửi được khiếu nại điểm danh."), "error");
+    } finally { btn.disabled = false; }
+  });
+}
+
+async function loadMyAttendanceAppeals() {
+  const panel = document.getElementById("attendanceAppealsMine");
+  if (!panel) return;
+  try {
+    const response = await api.get("/attendance-appeals/me");
+    const rows = Array.isArray(response.data) ? response.data : [];
+    panel.innerHTML = rows.length ? `<strong>Khiếu nại điểm danh đã gửi</strong><ul>${rows.map(a =>
+      `<li>Đơn #${Number(a.registration_id)} — ${escapeHtml(a.status)}${a.review_note ? ` — ${escapeHtml(a.review_note)}` : ""}</li>`
+    ).join("")}</ul>` : "Chưa có khiếu nại điểm danh.";
+  } catch (error) {
+    panel.textContent = extractApiError(error, "Không tải được khiếu nại điểm danh.");
   }
 }

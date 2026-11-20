@@ -7,10 +7,10 @@
   <title>Bảng điều khiển Nhà tổ chức - VolunteerLink</title>
   <link rel="icon" type="image/svg+xml" href="../assets/images/logo.svg">
   <link rel="stylesheet" href="../css/style.css">
-  <link rel="stylesheet" href="../css/user_dashboard.css">
+  <link rel="stylesheet" href="../css/components.css">
+  <link rel="stylesheet" href="../css/dashboard_common.css">
   <link rel="stylesheet" href="../css/organizer_dashboard.css">
   <link rel="stylesheet" href="../css/responsive.css">
-  <link rel="stylesheet" href="../css/notifications.css">
 </head>
 <body class="ud-body">
   <a href="#mainContent" class="skip-link visually-hidden">Chuyển đến nội dung chính</a>
@@ -295,24 +295,34 @@
         </div>
       </div>
 
-      <div class="ud-card">
-        <div class="table-wrapper" tabindex="0" role="region" aria-label="Danh sách chiến dịch của tổ chức">
-          <table class="ud-table">
-            <thead>
-              <tr>
-                <th scope="col">Tên chiến dịch</th>
-                <th scope="col">Lĩnh vực &amp; Địa điểm</th>
-                <th scope="col">Thời gian</th>
-                <th scope="col">Chỉ tiêu</th>
-                <th scope="col">Trạng thái</th>
-                <th scope="col">Thao tác</th>
-              </tr>
-            </thead>
-            <tbody id="orgCampaignsTbody"></tbody>
-            <tbody id="orgCampaignsTbody"></tbody>
-          </table>
-        </div>
-      </div>
+      <div class="campaign-list-grid" id="orgCampaignsGrid"></div>
+      <div id="orgCampaignsEmptyState" class="empty-state" style="display: none; padding: 36px; text-align: center; color: #94a3b8;"></div>
+
+      <template id="org-campaign-card-template">
+        <article class="campaign-card">
+          <img src="" alt="" class="campaign-card-img">
+          <div class="campaign-card-body">
+            <div class="campaign-card-badges">
+              <span class="badge badge-primary card-category"></span>
+              <span class="badge card-status"></span>
+            </div>
+            <h3 class="campaign-card-title">
+              <a href="" class="card-title-link"></a>
+            </h3>
+            <p class="campaign-card-desc"></p>
+            <div class="campaign-card-info">
+              <div>📍 <strong>Địa điểm:</strong> <span class="card-location"></span></div>
+              <div>🏢 <strong>Tổ chức:</strong> <span class="card-org"></span></div>
+              <div>👥 <strong>Chỉ tiêu:</strong> <span class="card-slots"></span></div>
+              <div>📅 <strong>Bắt đầu:</strong> <span class="card-start-time"></span></div>
+            </div>
+            <div class="org-card-reason" hidden style="padding: 8px 10px; border-radius: 8px; background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; font-size: 0.8rem; margin-bottom: 10px;"></div>
+            <div class="org-card-actions" style="display: flex; gap: 8px; margin-top: auto;">
+              <a href="" class="btn btn-primary btn-block card-detail-btn" style="flex: 1; text-align: center;">Xem chi tiết</a>
+            </div>
+          </div>
+        </article>
+      </template>
     </section>
 
     <!-- TAB 3: ATTENDANCE STATION -->
@@ -334,6 +344,13 @@
               <div class="ud-field">
                 <label for="codeGenCampaignSelect">Chọn chiến dịch đang mở</label>
                 <select id="codeGenCampaignSelect" class="ud-control"></select>
+              </div>
+              <div class="ud-field">
+                <label for="codeGenTypeSelect">Loại mã điểm danh</label>
+                <select id="codeGenTypeSelect" class="ud-control">
+                  <option value="CHECK_IN">CHECK-IN</option>
+                  <option value="CHECK_OUT">CHECK-OUT (hết hạn = hoàn thành chiến dịch)</option>
+                </select>
               </div>
               <div class="ud-field">
                 <label for="codeGenExpiresSelect">Thời hạn hiệu lực của mã</label>
@@ -381,6 +398,13 @@
           </div>
         </div>
       </div>
+    <div class="ud-card" style="margin:16px 0;" id="attendanceAppealsOrganizerPanel">
+      <div class="ud-card-header"><h2>Khiếu nại điểm danh sau chiến dịch</h2>
+        <button class="btn btn-outline btn-sm" type="button" id="refreshAttendanceAppeals">Làm mới</button>
+      </div>
+      <div class="ud-card-body" id="organizerAttendanceAppeals" aria-live="polite">Đang tải khiếu nại...</div>
+    </div>
+
     </section>
 
     <!-- TAB 4: VOLUNTEER REGISTRATIONS -->
@@ -856,8 +880,8 @@
           <select id="certVolunteerSelect" class="ud-control"></select>
         </div>
         <div class="ud-field" style="margin-block-end: 0;">
-          <label for="certHoursInput">Tổng số giờ công nhận</label>
-          <input type="number" id="certHoursInput" class="ud-control" min="0.5" step="0.5" value="4">
+          <label for="certHoursInput">Số giờ đã xác minh (tự động)</label>
+          <input type="number" id="certHoursInput" class="ud-control" min="0.01" step="0.01" value="" readonly>
         </div>
       </div>
       <div class="dash-modal-footer">
@@ -948,7 +972,6 @@
   <script src="https://cdn.jsdelivr.net/npm/axios@1.7.9/dist/axios.min.js"></script>
   <script src="../js/config.js"></script>
   <script src="../js/api.js"></script>
-  <script src="../js/notifications.js"></script>
   <script src="../js/data_store.js"></script>
   <script src="../js/utils.js"></script>
   <script src="../js/auth.js"></script>
