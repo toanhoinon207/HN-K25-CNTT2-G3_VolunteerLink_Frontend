@@ -11,6 +11,8 @@
 
 let currentUser = null;
 let cachedRegistrations = [];
+let cachedCertificates = [];
+let certFilterInitialized = false;
 let currentMyOrg = null;
 let myWaitlistEntries = [];
 let waitlistFilter = "ALL";
@@ -533,45 +535,140 @@ async function loadMyAttendanceHistory() {
 
 /* ==================== TAB 3: CHỨNG CHỈ & KHIẾU NẠI GIỜ ==================== */
 
+function formatCertHours(hours) {
+  const num = Number(hours || 0);
+  if (!Number.isFinite(num)) return "0";
+  return Number.isInteger(num) ? String(num) : num.toFixed(2).replace(/\.?0+$/, "");
+}
+
+function setupCertificateFilters() {
+  if (certFilterInitialized) return;
+  const searchInput = document.getElementById("certSearchInput");
+  const statusSelect = document.getElementById("certStatusFilter");
+  const sortSelect = document.getElementById("certSortSelect");
+  if (searchInput) {
+    searchInput.addEventListener("input", renderCertificates);
+  }
+  if (statusSelect) {
+    statusSelect.addEventListener("change", renderCertificates);
+  }
+  if (sortSelect) {
+    sortSelect.addEventListener("change", renderCertificates);
+  }
+  certFilterInitialized = true;
+}
+
+function renderCertificates() {
+  const container = document.getElementById("certificatesContainer");
+  if (!container) return;
+
+  const query = (document.getElementById("certSearchInput")?.value || "").trim().toLowerCase();
+  const statusFilter = document.getElementById("certStatusFilter")?.value || "ALL";
+  const sortBy = document.getElementById("certSortSelect")?.value || "NEWEST";
+
+  const filtered = cachedCertificates.filter((c) => {
+    if (statusFilter !== "ALL" && c.status !== statusFilter) return false;
+    if (!query) return true;
+    const haystack = [
+      c.campaign_title || "",
+      c.organization_name || "",
+      c.certificate_code || "",
+    ]
+      .join(" ")
+      .toLowerCase();
+    return haystack.includes(query);
+  });
+
+  filtered.sort((a, b) => {
+    if (sortBy === "MOST_HOURS") {
+      return Number(b.total_hours || 0) - Number(a.total_hours || 0);
+    }
+    const timeA = new Date(a.issued_at || 0).getTime();
+    const timeB = new Date(b.issued_at || 0).getTime();
+    return sortBy === "OLDEST" ? timeA - timeB : timeB - timeA;
+  });
+
+  if (cachedCertificates.length === 0) {
+    container.innerHTML = `<div class="cert-card" style="grid-column:1/-1;color:var(--text-muted);">Bạn chưa có chứng nhận điện tử nào.</div>`;
+    return;
+  }
+
+  if (filtered.length === 0) {
+    container.innerHTML = `<div class="cert-card" style="grid-column:1/-1;color:var(--text-muted);">Không tìm thấy chứng nhận phù hợp với bộ lọc hiện tại.</div>`;
+    return;
+  }
+
+  container.innerHTML = filtered
+    .map((c) => {
+      const isRevoked = c.status === "REVOKED";
+      const printUrl = `certificate-print.html?code=${encodeURIComponent(c.certificate_code)}`;
+      const orgName = c.organization_name || "Đơn vị tổ chức chiến dịch";
+      return `
+        <article class="cert-card">
+          <div class="cert-card-top">
+            <span class="cert-code">${escapeHtml(c.certificate_code)}</span>
+            <span class="status-pill ${isRevoked ? "status-rejected" : "status-approved"}">
+              ${isRevoked ? "Đã thu hồi" : "Hợp lệ"}
+            </span>
+          </div>
+          <div class="cert-title">${escapeHtml(c.campaign_title || `Chiến dịch #${c.campaign_id}`)}</div>
+          <div class="cert-org">Đơn vị cấp: <strong>${escapeHtml(orgName)}</strong></div>
+          <div class="cert-meta-grid">
+            <div class="cert-meta-item">
+              <span class="cert-meta-label">Số giờ</span>
+              <span class="cert-meta-val cert-meta-val--hours">${escapeHtml(formatCertHours(c.total_hours))} giờ</span>
+            </div>
+            <div class="cert-meta-item">
+              <span class="cert-meta-label">Ngày cấp</span>
+              <span class="cert-meta-val">${escapeHtml(safeFormatDateTime(c.issued_at))}</span>
+            </div>
+          </div>
+          ${
+            isRevoked && c.revoked_reason
+              ? `<div class="cert-meta" style="color:var(--danger);">Lý do thu hồi: ${escapeHtml(c.revoked_reason)}</div>`
+              : ""
+          }
+          <div class="cert-actions">
+            ${
+              isRevoked
+                ? `<button type="button" class="btn btn-outline btn-sm" disabled>Không thể in (Đã thu hồi)</button>`
+                : `<a class="btn btn-primary btn-sm" href="${printUrl}">Xem &amp; In chứng nhận</a>`
+            }
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
 async function loadCertificates() {
   const container = document.getElementById("certificatesContainer");
   const statCertEl = document.getElementById("statCertificates");
+  const totalHoursEl = document.getElementById("certTotalHoursValue");
+  const activeCountEl = document.getElementById("certActiveCountValue");
   if (!container) return;
 
-  container.innerHTML = `<div class="cert-card" style="grid-column:1/-1;color:var(--text-muted);">Đang tải chứng chỉ...</div>`;
+  setupCertificateFilters();
+  container.innerHTML = `<div class="cert-card" style="grid-column:1/-1;color:var(--text-muted);">Đang tải chứng nhận...</div>`;
 
   try {
     const res = await api.get("/certificates/me");
     const certs = Array.isArray(res.data) ? res.data : [];
+    cachedCertificates = certs;
 
-    const activeCount = certs.filter((c) => c.status === "ACTIVE").length;
-    if (statCertEl) statCertEl.textContent = String(activeCount);
+    const activeCerts = certs.filter((c) => c.status === "ACTIVE");
+    const totalActiveHours = activeCerts.reduce((sum, c) => sum + Number(c.total_hours || 0), 0);
 
-    if (certs.length === 0) {
-      container.innerHTML = `<div class="cert-card" style="grid-column:1/-1;color:var(--text-muted);">Bạn chưa có chứng chỉ điện tử nào.</div>`;
-      return;
-    }
+    if (statCertEl) statCertEl.textContent = String(activeCerts.length);
+    if (activeCountEl) activeCountEl.textContent = `${activeCerts.length} chứng nhận`;
+    if (totalHoursEl) totalHoursEl.textContent = `${formatCertHours(totalActiveHours)} giờ`;
 
-    container.innerHTML = certs
-      .map((c) => {
-        const isRevoked = c.status === "REVOKED";
-        return `
-          <article class="cert-card">
-            <span class="cert-code">${escapeHtml(c.certificate_code)}</span>
-            <div class="cert-title">${escapeHtml(c.campaign_title || `Chiến dịch #${c.campaign_id}`)}</div>
-            <div class="cert-meta">Số giờ ghi nhận: <strong>${Number(c.total_hours || 0)} giờ</strong></div>
-            <div class="cert-meta">Ngày cấp: ${escapeHtml(safeFormatDateTime(c.issued_at))}</div>
-            <div>
-              <span class="status-pill ${isRevoked ? "status-rejected" : "status-approved"}">
-                ${isRevoked ? "Đã thu hồi" : "Hợp lệ"}
-              </span>
-            </div>
-          </article>
-        `;
-      })
-      .join("");
+    renderCertificates();
   } catch (error) {
-    container.innerHTML = `<div class="cert-card" style="grid-column:1/-1;color:var(--danger);">${escapeHtml(extractApiError(error, "Không thể tải chứng chỉ."))}</div>`;
+    cachedCertificates = [];
+    if (activeCountEl) activeCountEl.textContent = "--";
+    if (totalHoursEl) totalHoursEl.textContent = "--";
+    container.innerHTML = `<div class="cert-card" style="grid-column:1/-1;color:var(--danger);">${escapeHtml(extractApiError(error, "Không thể tải chứng nhận."))}</div>`;
   }
 }
 
