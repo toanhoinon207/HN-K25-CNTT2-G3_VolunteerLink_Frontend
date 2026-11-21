@@ -12,12 +12,16 @@
 let currentUser = null;
 let cachedRegistrations = [];
 let currentMyOrg = null;
+let myWaitlistEntries = [];
+let waitlistFilter = "ALL";
+let waitlistPendingAction = false;
 
 const REG_STATUS_MAP = {
   PENDING: { label: "Đang chờ duyệt", cls: "status-pending" },
   APPROVED: { label: "Đã duyệt tham gia", cls: "status-approved" },
   REJECTED: { label: "Bị từ chối", cls: "status-rejected" },
   CANCELLED: { label: "Đã hủy", cls: "status-closed" },
+  WAITLISTED: { label: "Trong danh sách chờ", cls: "status-pending" },
 };
 
 const ATT_STATUS_MAP = {
@@ -66,6 +70,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupAttendanceActions();
   setupAttendanceAppeals();
   setupProfilePreview();
+  setupMyWaitlist();
 
   const logoutBtn = document.getElementById("logoutBtn");
   if (logoutBtn) {
@@ -79,7 +84,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  await loadMyRegistrations();
+  await Promise.all([loadMyRegistrations(), loadMyWaitlist()]);
   await Promise.allSettled([
     loadMyAttendanceHistory(),
     loadMyAttendanceAppeals(),
@@ -147,6 +152,8 @@ function switchUserTab(tabId) {
     panel.hidden = !isTarget;
   });
 
+  if (tabId === "waitlist") loadMyWaitlist();
+
   if (tabId && window.history?.replaceState) {
     const url = new URL(window.location.href);
     url.searchParams.set("tab", tabId);
@@ -188,6 +195,131 @@ function setupUserMenu() {
       trigger.focus();
     }
   });
+}
+
+
+/* ==================== DANH SÁCH CHỜ THỰC TẾ ==================== */
+const WL_STATUS = {
+  WAITING: ["Đang chờ", "status-closed"],
+  INVITED: ["Cần phản hồi", "status-pending"],
+  ACCEPTED: ["Đã chấp nhận", "status-approved"],
+  DECLINED: ["Đã từ chối", "status-rejected"],
+  EXPIRED: ["Hết hạn", "status-rejected"],
+};
+
+function waitlistDeadlineMs(value) {
+  if (!value) return NaN;
+  // Backend stores Vietnamese local wall time without timezone.
+  const normalized = String(value).replace(" ", "T");
+  return new Date(/[Zz]|[+-]\d{2}:\d{2}$/.test(normalized) ? normalized : normalized + "+07:00").getTime();
+}
+
+function waitlistRemaining(entry) {
+  const ms = waitlistDeadlineMs(entry.response_deadline) - Date.now();
+  if (!Number.isFinite(ms) || ms <= 0) return "Đã hết hạn";
+  const t = Math.ceil(ms / 1000);
+  return `${String(Math.floor(t / 3600)).padStart(2, "0")}:${String(Math.floor(t % 3600 / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+}
+
+function isActiveWaitlistInvite(e) {
+  return e.status === "INVITED" && waitlistDeadlineMs(e.response_deadline) > Date.now();
+}
+
+function setupMyWaitlist() {
+  document.getElementById("refreshMyWaitlistBtn")?.addEventListener("click", loadMyWaitlist);
+  document.querySelectorAll("[data-wl-filter]").forEach((btn) => btn.addEventListener("click", () => {
+    waitlistFilter = btn.dataset.wlFilter;
+    document.querySelectorAll("[data-wl-filter]").forEach((b) => b.classList.toggle("active", b === btn));
+    renderMyWaitlist();
+  }));
+  document.getElementById("tab-waitlist")?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-wl-response]");
+    if (!button) return;
+    respondMyWaitlist(button.dataset.wlEntry, button.dataset.wlResponse);
+  });
+  setInterval(() => {
+    document.querySelectorAll("[data-wl-countdown]").forEach((el) => {
+      const item = myWaitlistEntries.find((e) => String(e.id) === el.dataset.wlCountdown);
+      if (item) el.textContent = waitlistRemaining(item);
+    });
+    // Disable expired buttons even before the next refresh.
+    document.querySelectorAll("[data-wl-response]").forEach((btn) => {
+      const item = myWaitlistEntries.find((e) => String(e.id) === btn.dataset.wlEntry);
+      btn.disabled = waitlistPendingAction || !item || !isActiveWaitlistInvite(item);
+    });
+  }, 1000);
+}
+
+async function loadMyWaitlist() {
+  try {
+    const response = await api.get("/waitlist/mine");
+    myWaitlistEntries = Array.isArray(response.data) ? response.data : [];
+    renderMyWaitlist();
+  } catch (error) {
+    myWaitlistEntries = [];
+    renderMyWaitlist();
+    const tbody = document.getElementById("myWaitlistTbody");
+    if (tbody) tbody.innerHTML = `<tr><td colspan="5">${escapeHtml(extractApiError(error, "Không tải được danh sách chờ."))}</td></tr>`;
+  }
+}
+
+function renderMyWaitlist() {
+  const active = myWaitlistEntries.filter(isActiveWaitlistInvite);
+  const waiting = myWaitlistEntries.filter((e) => e.status === "WAITING");
+  const accepted = myWaitlistEntries.filter((e) => e.status === "ACCEPTED");
+  const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = String(value); };
+  set("wlStatInvited", active.length);
+  set("wlStatWaiting", waiting.length);
+  set("wlStatAccepted", accepted.length);
+  set("myWaitlistCountBadge", active.length + waiting.length);
+  const title = (e) => escapeHtml(e.campaign_title || `Chiến dịch #${e.campaign_id}`);
+  const actions = (e) => `<button type="button" class="btn btn-primary btn-sm" data-wl-entry="${e.id}" data-wl-response="ACCEPTED" ${isActiveWaitlistInvite(e) && !waitlistPendingAction ? "" : "disabled"}>Chấp nhận</button> <button type="button" class="btn btn-outline btn-sm" data-wl-entry="${e.id}" data-wl-response="DECLINED" ${isActiveWaitlistInvite(e) && !waitlistPendingAction ? "" : "disabled"}>Từ chối</button>`;
+  const invites = document.getElementById("userWaitlistInviteSection");
+  if (invites) invites.innerHTML = active.length ? active.map((e) => `
+    <article class="ud-card wl-invite-card">
+      <div class="wl-invite-card-head"><span class="status-pill status-pending">Bạn được mời tham gia</span>
+      <div class="wl-countdown-pill">Còn lại: <strong data-wl-countdown="${e.id}">${waitlistRemaining(e)}</strong></div></div>
+      <div class="wl-invite-card-body"><div class="wl-invite-info">
+      <h2 class="wl-invite-title">${title(e)}</h2>
+      <p class="wl-invite-hint">Hạn phản hồi: ${escapeHtml(safeFormatDateTime(e.response_deadline))}. Nếu hết hạn, suất sẽ được chuyển cho người tiếp theo.</p></div>
+      <div class="wl-invite-actions">${actions(e)}</div></div>
+    </article>`).join("") : "";
+  let shown = myWaitlistEntries;
+  if (waitlistFilter === "HISTORY") shown = shown.filter((e) => !["WAITING", "INVITED"].includes(e.status));
+  else if (waitlistFilter !== "ALL") shown = shown.filter((e) => e.status === waitlistFilter);
+  const tbody = document.getElementById("myWaitlistTbody");
+  if (!tbody) return;
+  tbody.innerHTML = shown.length ? shown.map((e) => {
+    const [label, cls] = WL_STATUS[e.status] || [e.status, "status-closed"];
+    const position = e.status === "WAITING" ? `#${e.queue_position ?? e.position}` : (e.status === "INVITED" ? "Đến lượt" : "—");
+    const deadline = e.status === "INVITED"
+      ? `<strong data-wl-countdown="${e.id}">${waitlistRemaining(e)}</strong><div class="td-subtitle">${escapeHtml(safeFormatDateTime(e.response_deadline))}</div>`
+      : (e.status === "WAITING" ? "Chờ đến lượt" : escapeHtml(safeFormatDateTime(e.responded_at)));
+    return `<tr><td><span class="wl-position-badge">${escapeHtml(position)}</span></td>
+      <td><div class="td-title">${title(e)}</div><div class="td-subtitle">Vào hàng chờ: ${escapeHtml(safeFormatDateTime(e.created_at))}</div></td>
+      <td><span class="status-pill ${cls}">${escapeHtml(e.status === "INVITED" && !isActiveWaitlistInvite(e) ? "Đã quá hạn" : label)}</span></td>
+      <td>${deadline}</td><td>${e.status === "INVITED" ? actions(e) : "—"}</td></tr>`;
+  }).join("") : `<tr><td colspan="5" style="text-align:center;padding:28px;">Không có mục nào phù hợp.</td></tr>`;
+}
+
+async function respondMyWaitlist(entryId, response) {
+  if (waitlistPendingAction) return;
+  const entry = myWaitlistEntries.find((e) => String(e.id) === String(entryId));
+  if (!entry || !isActiveWaitlistInvite(entry)) return;
+  if (response === "DECLINED" && !window.confirm("Bạn có chắc muốn từ chối suất tham gia này?")) return;
+  waitlistPendingAction = true;
+  renderMyWaitlist();
+  try {
+    const result = await api.patch(`/waitlist/${entryId}/respond`, { response });
+    showToast(result.data?.status === "EXPIRED" ? "Lời mời đã hết hạn, suất đã chuyển cho người kế tiếp." : (response === "ACCEPTED" ? "Đã chấp nhận suất tham gia." : "Đã từ chối suất tham gia."), result.data?.status === "EXPIRED" ? "warning" : "success");
+    await Promise.all([loadMyWaitlist(), loadMyRegistrations()]);
+  } catch (error) {
+    showToast(extractApiError(error, "Không thể phản hồi lời mời."), "error");
+    await loadMyWaitlist();
+  } finally {
+    waitlistPendingAction = false;
+    renderMyWaitlist();
+  }
 }
 
 /* ==================== TAB 1: TỔNG QUAN & ĐƠN ĐĂNG KÝ ==================== */

@@ -1173,6 +1173,10 @@ tbody.is-refreshing {
   margin-block-end: 14px;
 }
 
+.org-stat-chips[hidden] {
+  display: none;
+}
+
 .org-stat-chip {
   display: inline-flex;
   align-items: center;
@@ -1293,4 +1297,109 @@ tbody.is-refreshing {
     inline-size: 100%;
     block-size: 150px;
   }
+}
+
+/* ---------- Waitlist Summary & Queue Badges ---------- */
+.org-wl-subtitle {
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.org-waitlist-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 24px;
+  background: var(--bg);
+  border-block-end: 1px solid var(--border);
+}
+
+.org-wl-pills {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.org-wl-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.org-wl-pill strong {
+  color: var(--text-main);
+  font-weight: 800;
+}
+
+.org-wl-pill--invited {
+  background: var(--warning-bg);
+  border-color: var(--warning-border);
+  color: #92400E;
+}
+
+.org-wl-pill--invited strong {
+  color: #92400E;
+}
+
+.org-wl-pill--waiting {
+  background: var(--info-bg);
+  border-color: var(--info-border);
+  color: #1D4ED8;
+}
+
+.org-wl-pill--waiting strong {
+  color: #1D4ED8;
+}
+
+.org-wl-rule-note {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.org-wl-position {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: 36px;
+  padding: 3px 9px;
+  border-radius: var(--radius-full);
+  background: var(--info-bg);
+  border: 1px solid var(--info-border);
+  color: #1D4ED8;
+  font-size: 0.76rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  margin-inline-end: 6px;
+}
+
+.org-wl-countdown {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+  color: #92400E;
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.org-waitlist-table thead th:last-child,
+.org-waitlist-table tbody td:last-child {
+  text-align: start;
 }

@@ -1594,7 +1594,7 @@ async function renderVolunteerApplicants(forceRefresh = false) {
   try {
     if (orgCampaignIds.length > 0) {
       const fetchPromises = orgCampaignIds.map((id) =>
-        api.get(`/registrations/campaign/${id}`).then((r) => r.data).catch(() => [])
+        api.get(`/registrations/campaign/${id}`).then((r) => r.data).catch((error) => { throw error; })
       );
       const results = await Promise.all(fetchPromises);
       allRegs = results.flat().map((r) => {
@@ -1918,51 +1918,142 @@ function openRegistrationDetailModal(regId) {
   openModal("registrationDetailModal");
 }
 
+function formatWaitlistStatusPill(status) {
+  const s = String(status || "WAITING").toUpperCase();
+  const map = {
+    INVITED: { cls: "status-pending", label: "Đang mời" },
+    WAITING: { cls: "status-closed", label: "Đang chờ" },
+    ACCEPTED: { cls: "status-approved", label: "Đã chấp nhận" },
+    DECLINED: { cls: "status-rejected", label: "Đã từ chối" },
+    EXPIRED: { cls: "status-rejected", label: "Hết hạn" },
+  };
+  const cfg = map[s] || { cls: "status-closed", label: s };
+  return `<span class="status-pill ${cfg.cls}">${escapeHtml(cfg.label)}</span>`;
+}
+
+function formatWaitlistDeadlineCell(entry) {
+  const status = String(entry.status || "").toUpperCase();
+  if (status === "INVITED" && entry.response_deadline) {
+    const deadlineMs = new Date(entry.response_deadline).getTime();
+    const diffMs = deadlineMs - Date.now();
+    let countdownText = "Đã quá hạn";
+    if (!Number.isNaN(diffMs) && diffMs > 0) {
+      const totalSec = Math.floor(diffMs / 1000);
+      const hrs = String(Math.floor(totalSec / 3600)).padStart(2, "0");
+      const mins = String(Math.floor((totalSec % 3600) / 60)).padStart(2, "0");
+      const secs = String(totalSec % 60).padStart(2, "0");
+      countdownText = `Còn ${hrs}:${mins}:${secs}`;
+    }
+    return `
+      <span class="org-wl-countdown">${escapeHtml(countdownText)}</span>
+      <div class="td-subtitle">Hạn: ${escapeHtml(formatDateTime(entry.response_deadline))}</div>
+    `;
+  }
+  if (status === "WAITING") {
+    return `<span class="td-subtitle">Chờ đến lượt</span>`;
+  }
+  if (entry.responded_at) {
+    return `<span class="td-subtitle">${escapeHtml(formatDateTime(entry.responded_at))}</span>`;
+  }
+  return `<span class="td-subtitle">—</span>`;
+}
+
+function updateWaitlistSummaryCounts(entries) {
+  let invited = 0;
+  let waiting = 0;
+  let done = 0;
+  entries.forEach((e) => {
+    const s = String(e.status || "").toUpperCase();
+    if (s === "INVITED") invited += 1;
+    else if (s === "WAITING") waiting += 1;
+    else done += 1;
+  });
+  const elInv = document.getElementById("orgWlInvitedCount");
+  const elWait = document.getElementById("orgWlWaitingCount");
+  const elDone = document.getElementById("orgWlDoneCount");
+  if (elInv) elInv.textContent = String(invited);
+  if (elWait) elWait.textContent = String(waiting);
+  if (elDone) elDone.textContent = String(done);
+}
+
 async function loadCampaignWaitlist() {
   const tbody = document.getElementById("orgWaitlistTbody");
   if (!tbody) return;
+  if (!orgCampaignsLoaded) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:28px;">Không thể xác minh danh sách chiến dịch từ Backend. Vui lòng tải lại trang.</td></tr>`;
+    return;
+  }
   const campId = document.getElementById("volCampaignFilter")?.value || "";
+  const searchQuery = (document.getElementById("volSearchInput")?.value || "").trim().toLowerCase();
   const allCampaigns = getOrgCampaigns();
   const campMap = new Map(allCampaigns.map((c) => [String(c.id), c]));
   const targetIds = campId ? [campId] : allCampaigns.map((c) => c.id);
 
   if (targetIds.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #94a3b8; padding: 32px;">Chưa có chiến dịch nào để xem danh sách chờ.</td></tr>`;
+    updateWaitlistSummaryCounts([]);
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #94a3b8; padding: 32px;">Chưa có chiến dịch nào để xem danh sách chờ.</td></tr>`;
     return;
   }
 
-  tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #94a3b8; padding: 28px;">Đang tải danh sách chờ...</td></tr>`;
+  const refreshBtn = document.querySelector("#volWaitlistWrap .org-icon-btn");
+  if (!tbody.children.length || tbody.querySelector("td[colspan]")) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #94a3b8; padding: 28px;">Đang tải danh sách chờ...</td></tr>`;
+  } else {
+    tbody.classList.add("is-refreshing");
+  }
+  if (refreshBtn) refreshBtn.classList.add("is-spinning");
+
   try {
     const results = await Promise.all(
       targetIds.map((id) =>
         api.get(`/waitlist/campaign/${id}`)
           .then((res) => (Array.isArray(res.data) ? res.data : []).map((e) => ({ ...e, _campaign_id: e.campaign_id || id })))
-          .catch(() => [])
+          .catch((error) => { throw error; })
       )
     );
     const entries = results.flat();
-    if (entries.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #94a3b8; padding: 32px;">Chưa có tình nguyện viên nào trong danh sách chờ.</td></tr>`;
+    updateWaitlistSummaryCounts(entries);
+
+    const filtered = searchQuery
+      ? entries.filter((e) => {
+          const cid = String(e._campaign_id || campId);
+          const campTitle = (campMap.get(cid)?.title || "").toLowerCase();
+          const userText = `tnv #${e.user_id} ${e.user_name || ""} ${e.full_name || ""}`.toLowerCase();
+          return campTitle.includes(searchQuery) || userText.includes(searchQuery);
+        })
+      : entries;
+
+    if (filtered.length === 0) {
+      const emptyMsg = entries.length === 0
+        ? "Chưa có tình nguyện viên nào trong danh sách chờ."
+        : "Không tìm thấy tình nguyện viên phù hợp với từ khóa.";
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #94a3b8; padding: 32px;">${emptyMsg}</td></tr>`;
       return;
     }
-    tbody.innerHTML = entries.map((e, idx) => {
+    tbody.innerHTML = filtered.map((e, idx) => {
       const cid = String(e._campaign_id || campId);
       const camp = campMap.get(cid);
+      const pos = e.queue_position ?? e.position ?? idx + 1;
+      const userSub = escapeHtml(e.user_name || e.full_name || "");
       return `
         <tr>
           <td>
-            <div class="td-title">#${idx + 1} · TNV #${e.user_id}</div>
-            <div class="td-subtitle">${escapeHtml(e.user_name || e.full_name || "")}</div>
+            <div class="td-title"><span class="org-wl-position">#${escapeHtml(String(pos))}</span>TNV #${escapeHtml(String(e.user_id))}</div>
+            ${userSub ? `<div class="td-subtitle">${userSub}</div>` : ""}
           </td>
           <td>${escapeHtml(camp?.title || `Chiến dịch #${cid}`)}</td>
-          <td><span class="status-pill status-pending">${escapeHtml(e.status || "WAITING")}</span></td>
-          <td style="font-size: 13px;">${formatDateTime(e.created_at)}</td>
+          <td>${formatWaitlistStatusPill(e.status)}</td>
+          <td>${formatWaitlistDeadlineCell(e)}</td>
+          <td style="font-size: 13px;">${e.created_at ? escapeHtml(formatDateTime(e.created_at)) : "—"}</td>
         </tr>
       `;
     }).join("");
   } catch (err) {
     const msg = Layout.extractApiErrorMessage(err, "Không thể tải danh sách chờ.");
-    tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #b91c1c; padding: 32px;">${escapeHtml(msg)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #b91c1c; padding: 32px;">${escapeHtml(msg)}</td></tr>`;
+  } finally {
+    tbody.classList.remove("is-refreshing");
+    if (refreshBtn) refreshBtn.classList.remove("is-spinning");
   }
 }
 

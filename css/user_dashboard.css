@@ -2,3 +2,213 @@
    VolunteerLink - User Dashboard Specific Styles
    Style dùng chung cho 3 dashboard nằm ở css/dashboard_common.css
    ========================================================= */
+
+/* ---------- Waitlist (Danh sách chờ của tôi) ---------- */
+.wl-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-block-end: 20px;
+}
+
+.wl-kpi-card--urgent {
+  border-color: var(--warning-border);
+  background: linear-gradient(180deg, #FFFDF7 0%, var(--surface) 100%);
+}
+
+.wl-invite-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-block-end: 20px;
+}
+
+.wl-invite-card {
+  border-color: var(--primary-border);
+  box-shadow: var(--shadow-sm);
+}
+
+.wl-invite-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 14px 24px;
+  background: var(--primary-light);
+  border-block-end: 1px solid var(--primary-border);
+}
+
+.wl-invite-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wl-invite-card-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 24px;
+}
+
+.wl-invite-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.wl-invite-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0 0 6px;
+}
+
+.wl-invite-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.84rem;
+  color: var(--text-muted);
+  margin: 0 0 10px;
+}
+
+.wl-invite-hint {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  margin: 0;
+}
+
+.wl-invite-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.wl-position-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: 40px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  background: var(--info-bg);
+  color: #1D4ED8;
+  border: 1px solid var(--info-border);
+  font-size: 0.78rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.wl-position-badge--invited {
+  background: var(--surface);
+  color: var(--primary-dark);
+  border-color: var(--primary-border);
+}
+
+.wl-position-badge--muted {
+  background: var(--surface-alt);
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+
+.wl-countdown-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: var(--radius-full);
+  background: var(--warning-bg);
+  color: #92400E;
+  border: 1px solid var(--warning-border);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.wl-countdown-pill--compact {
+  padding: 3px 9px;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.wl-deadline-note {
+  color: #B45309;
+  font-size: 0.76rem;
+}
+
+.wl-btn-decline {
+  color: var(--danger);
+  border-color: var(--danger-border);
+}
+
+.wl-btn-decline:hover {
+  background: var(--danger-bg);
+  border-color: var(--danger);
+}
+
+.wl-card-header-wrap {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.wl-filter-chips {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.wl-filter-chip {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.wl-filter-chip:hover {
+  background: var(--bg);
+  color: var(--text-main);
+}
+
+.wl-filter-chip.active {
+  background: var(--primary-light);
+  border-color: var(--primary-border);
+  color: var(--primary-dark);
+}
+
+.wl-actions-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+@media (max-width: 900px) {
+  .wl-kpi-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .wl-invite-card-body {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .wl-invite-actions {
+    justify-content: flex-start;
+  }
+}
