@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>In chứng nhận tình nguyện - VolunteerLink</title>
+  <link rel="icon" type="image/svg+xml" href="../assets/images/logo.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --emerald: #1e7e55;
+      --emerald-dark: #166544;
+      --emerald-soft: #ecfdf5;
+      --emerald-border: #a7f3d0;
+      --amber: #d97706;
+      --slate-900: #0f172a;
+      --slate-600: #475569;
+      --slate-500: #64748b;
+      --slate-200: #e2e8f0;
+      --slate-100: #f1f5f9;
+      --danger: #dc2626;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--slate-100);
+      color: var(--slate-900);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .print-toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: #ffffff;
+      border-bottom: 1px solid var(--slate-200);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .toolbar-left,
+    .toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .toolbar-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--emerald-soft);
+      color: var(--emerald);
+      border: 1px solid var(--emerald-border);
+      border-radius: 9999px;
+      padding: 6px 14px;
+      font-size: 0.82rem;
+      font-weight: 600;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      border-radius: 10px;
+      padding: 10px 16px;
+      font-family: inherit;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      border: 1px solid transparent;
+      transition: background-color 0.15s ease, border-color 0.15s ease;
+    }
+
+    .btn-outline {
+      background: #ffffff;
+      color: var(--slate-900);
+      border-color: var(--slate-200);
+    }
+
+    .btn-outline:hover {
+      background: #f8fafc;
+      border-color: #cbd5e1;
+    }
+
+    .btn-primary {
+      background: var(--emerald);
+      color: #ffffff;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--emerald-dark);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .canvas-wrap {
+      flex: 1;
+      padding: 32px 20px 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .state-card {
+      background: #ffffff;
+      border: 1px solid var(--slate-200);
+      border-radius: 16px;
+      padding: 32px;
+      max-width: 540px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08);
+    }
+
+    .state-card h2 {
+      margin: 0 0 8px;
+      font-size: 1.25rem;
+    }
+
+    .state-card p {
+      margin: 0 0 20px;
+      color: var(--slate-600);
+      line-height: 1.5;
+    }
+
+    /* A4 Landscape Certificate Sheet */
+    .cert-sheet {
+      width: 1056px;
+      max-width: 100%;
+      min-height: 740px;
+      background: #ffffff;
+      position: relative;
+      padding: 24px;
+      box-shadow: 0 20px 45px -10px rgba(15, 23, 42, 0.14);
+      border-radius: 6px;
+    }
+
+    .cert-border-outer {
+      border: 3px solid var(--emerald);
+      padding: 10px;
+      height: 100%;
+      min-height: 692px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .cert-border-inner {
+      border: 1.5px solid var(--amber);
+      padding: 38px 48px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 50% 48%, rgba(30, 126, 85, 0.04) 0%, transparent 58%),
+        #ffffff;
+    }
+
+    .cert-corner {
+      position: absolute;
+      width: 22px;
+      height: 22px;
+      border-color: var(--amber);
+      border-style: solid;
+      pointer-events: none;
+    }
+    .cert-corner--tl { top: 8px; left: 8px; border-width: 3px 0 0 3px; }
+    .cert-corner--tr { top: 8px; right: 8px; border-width: 3px 3px 0 0; }
+    .cert-corner--bl { bottom: 8px; left: 8px; border-width: 0 0 3px 3px; }
+    .cert-corner--br { bottom: 8px; right: 8px; border-width: 0 3px 3px 0; }
+
+    .cert-header {
+      text-align: center;
+    }
+
+    .cert-brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 800;
+      font-size: 1.1rem;
+      color: var(--emerald);
+      margin-bottom: 14px;
+    }
+
+    .cert-brand svg {
+      width: 26px;
+      height: 26px;
+      stroke: var(--emerald);
+      fill: none;
+      stroke-width: 2.2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .cert-heading {
+      margin: 0;
+      font-size: 2rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      color: var(--slate-900);
+      text-transform: uppercase;
+    }
+
+    .cert-subheading {
+      margin: 6px 0 0;
+      font-size: 0.85rem;
+      letter-spacing: 0.16em;
+      color: var(--amber);
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .cert-body {
+      text-align: center;
+      margin: 26px 0;
+    }
+
+    .cert-lead {
+      margin: 0 0 10px;
+      font-size: 1rem;
+      color: var(--slate-600);
+    }
+
+    .cert-recipient {
+      margin: 0 0 18px;
+      font-size: 2.35rem;
+      font-weight: 800;
+      color: var(--emerald);
+      letter-spacing: 0.02em;
+      line-height: 1.2;
+    }
+
+    .cert-campaign {
+      margin: 8px auto 18px;
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: var(--slate-900);
+      max-width: 780px;
+      line-height: 1.4;
+    }
+
+    .cert-org-line {
+      margin: 0 0 22px;
+      font-size: 1rem;
+      color: var(--slate-600);
+    }
+
+    .cert-org-line strong {
+      color: var(--slate-900);
+    }
+
+    .cert-hours-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--emerald-soft);
+      border: 1.5px solid var(--emerald-border);
+      color: var(--emerald);
+      border-radius: 9999px;
+      padding: 10px 26px;
+      font-size: 1.05rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+    }
+
+    .cert-footer {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr 1.2fr;
+      align-items: end;
+      gap: 24px;
+      padding-top: 20px;
+      border-top: 1px solid var(--slate-200);
+    }
+
+    .cert-meta-block {
+      font-size: 0.86rem;
+      color: var(--slate-600);
+      line-height: 1.7;
+    }
+
+    .cert-meta-block strong {
+      color: var(--slate-900);
+    }
+
+    .cert-code-mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-weight: 700;
+      color: var(--emerald-dark);
+    }
+
+    .cert-seal-col {
+      text-align: center;
+    }
+
+    .cert-seal {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 96px;
+      height: 96px;
+      border-radius: 9999px;
+      border: 2px dashed var(--emerald);
+      color: var(--emerald);
+      font-size: 0.68rem;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 8px;
+      background: rgba(236, 253, 245, 0.55);
+    }
+
+    .cert-sign-col {
+      text-align: center;
+    }
+
+    .cert-sign-org {
+      font-size: 0.92rem;
+      font-weight: 700;
+      color: var(--slate-900);
+      margin-bottom: 42px;
+    }
+
+    .cert-sign-line {
+      border-top: 1px solid var(--slate-500);
+      padding-top: 6px;
+      font-size: 0.84rem;
+      color: var(--slate-600);
+      font-weight: 600;
+    }
+
+    @page {
+      size: A4 landscape;
+      margin: 6mm;
+    }
+
+    @media print {
+      html,
+      body {
+        background: #ffffff;
+        margin: 0;
+        padding: 0;
+      }
+
+      .print-toolbar {
+        display: none !important;
+      }
+
+      .canvas-wrap {
+        padding: 0;
+        display: block;
+      }
+
+      .cert-sheet {
+        width: 100%;
+        max-width: none;
+        min-height: 0;
+        padding: 0;
+        box-shadow: none;
+        border-radius: 0;
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+
+      .cert-border-outer {
+        min-height: 0;
+        height: 174mm;
+      }
+
+      .cert-border-inner {
+        padding: 22px 34px;
+      }
+
+      .cert-body {
+        margin: 12px 0;
+      }
+
+      .cert-recipient {
+        margin-bottom: 12px;
+        font-size: 2.1rem;
+      }
+
+      .cert-campaign {
+        margin: 6px auto 12px;
+      }
+
+      .cert-org-line {
+        margin-bottom: 14px;
+      }
+
+      .cert-footer {
+        grid-template-columns: 1.2fr 1fr 1.2fr !important;
+        text-align: left;
+        padding-top: 14px;
+      }
+
+      .cert-sign-org {
+        margin-bottom: 30px;
+      }
+    }
+
+    @media screen and (max-width: 768px) {
+      .cert-border-inner {
+        padding: 24px 18px;
+      }
+      .cert-heading {
+        font-size: 1.4rem;
+      }
+      .cert-recipient {
+        font-size: 1.7rem;
+      }
+      .cert-campaign {
+        font-size: 1.1rem;
+      }
+      .cert-footer {
+        grid-template-columns: 1fr;
+        text-align: center;
+      }
+      .cert-sign-org {
+        margin-bottom: 24px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="print-toolbar">
+    <div class="toolbar-left">
+      <a href="user-dashboard.html?tab=certificates" class="btn btn-outline">← Quay lại Chứng nhận của tôi</a>
+      <span class="toolbar-pill">Mẫu A4 Ngang • Sẵn sàng in / Lưu PDF</span>
+    </div>
+    <div class="toolbar-right">
+      <button type="button" id="printCertBtn" class="btn btn-primary" disabled>In / Lưu PDF</button>
+    </div>
+  </header>
+
+  <main class="canvas-wrap">
+    <section id="certLoadingState" class="state-card">
+      <h2>Đang tải chứng nhận...</h2>
+      <p>Vui lòng đợi trong giây lát để hệ thống xác thực thông tin chứng nhận của bạn.</p>
+    </section>
+
+    <section id="certErrorState" class="state-card" hidden>
+      <h2 id="certErrorTitle" style="color: var(--danger);">Không thể hiển thị chứng nhận</h2>
+      <p id="certErrorMessage">Chứng nhận không tồn tại hoặc bạn không có quyền truy cập.</p>
+      <a href="user-dashboard.html?tab=certificates" class="btn btn-primary">Quay lại Chứng nhận của tôi</a>
+    </section>
+
+    <article id="certSheet" class="cert-sheet" hidden>
+      <div class="cert-border-outer">
+        <div class="cert-corner cert-corner--tl"></div>
+        <div class="cert-corner cert-corner--tr"></div>
+        <div class="cert-corner cert-corner--bl"></div>
+        <div class="cert-corner cert-corner--br"></div>
+
+        <div class="cert-border-inner">
+          <div class="cert-header">
+            <div class="cert-brand">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 3.5 1 9.2-1.3 7.3-6.5 8.8-9 8.8Z"/>
+                <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/>
+              </svg>
+              <span>VolunteerLink</span>
+            </div>
+            <h1 class="cert-heading">Giấy Chứng Nhận Tình Nguyện</h1>
+            <p class="cert-subheading">Certificate of Volunteer Service</p>
+          </div>
+
+          <div class="cert-body">
+            <p class="cert-lead">Trân trọng chứng nhận Tình nguyện viên</p>
+            <h2 class="cert-recipient" id="certVolunteerName">--</h2>
+            <p class="cert-lead">Đã tích cực tham gia và hoàn thành chiến dịch</p>
+            <div class="cert-campaign" id="certCampaignTitle">--</div>
+            <p class="cert-org-line">Đơn vị tổ chức &amp; cấp chứng nhận: <strong id="certOrgName">--</strong></p>
+            <div class="cert-hours-badge" id="certHoursBadge">0 GIỜ TÌNH NGUYỆN</div>
+          </div>
+
+          <div class="cert-footer">
+            <div class="cert-meta-block">
+              <div>Mã chứng nhận: <span class="cert-code-mono" id="certCodeValue">--</span></div>
+              <div>Ngày cấp: <strong id="certIssuedAtValue">--</strong></div>
+              <div>Trạng thái: <strong style="color: var(--emerald);">Hợp lệ (Đã xác thực)</strong></div>
+            </div>
+
+            <div class="cert-seal-col">
+              <div class="cert-seal">
+                <span>Đã xác thực</span>
+                <span>VolunteerLink</span>
+              </div>
+            </div>
+
+            <div class="cert-sign-col">
+              <div class="cert-sign-org" id="certSignOrgName">--</div>
+              <div class="cert-sign-line">Đại diện Ban Tổ Chức</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </article>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/axios@1.7.9/dist/axios.min.js"></script>
+  <script src="../js/config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/utils.js"></script>
+  <script src="../js/auth.js"></script>
+  <script>
+    function formatPrintHours(hours) {
+      const num = Number(hours || 0);
+      if (!Number.isFinite(num)) return "0";
+      return Number.isInteger(num) ? String(num) : num.toFixed(2).replace(/\.?0+$/, "");
+    }
+
+    function formatIssueDate(value) {
+      if (!value) return "--";
+      const d = new Date(value);
+      if (isNaN(d.getTime())) return "--";
+      return d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
+    }
+
+    function showError(title, message) {
+      document.getElementById("certLoadingState").hidden = true;
+      document.getElementById("certSheet").hidden = true;
+      document.getElementById("certErrorTitle").textContent = title;
+      document.getElementById("certErrorMessage").textContent = message;
+      document.getElementById("certErrorState").hidden = false;
+    }
+
+    document.addEventListener("DOMContentLoaded", async () => {
+      const printBtn = document.getElementById("printCertBtn");
+      if (printBtn) {
+        printBtn.addEventListener("click", () => window.print());
+      }
+
+      const currentUser = await Auth.requireAuth(["USER", "ORGANIZER"]);
+      if (!currentUser) return;
+
+      const params = new URLSearchParams(window.location.search);
+      const code = (params.get("code") || "").trim();
+      if (!code) {
+        showError("Thiếu mã chứng nhận", "Vui lòng chọn một chứng nhận từ danh sách Chứng nhận của tôi.");
+        return;
+      }
+
+      try {
+        const res = await api.get("/certificates/me");
+        const certs = Array.isArray(res.data) ? res.data : [];
+        const cert = certs.find((item) => item.certificate_code === code);
+
+        if (!cert) {
+          showError("Không tìm thấy chứng nhận", `Không tìm thấy chứng nhận với mã "${code}" trong tài khoản của bạn.`);
+          return;
+        }
+
+        if (cert.status === "REVOKED") {
+          const reason = cert.revoked_reason ? ` Lý do: ${cert.revoked_reason}` : "";
+          showError("Chứng nhận đã bị thu hồi", `Chứng nhận mã ${cert.certificate_code} hiện không còn hiệu lực.${reason}`);
+          return;
+        }
+
+        const volunteerName = cert.volunteer_name || currentUser.full_name || "Tình nguyện viên";
+        const orgName = cert.organization_name || "Ban Tổ Chức Chiến Dịch";
+
+        document.getElementById("certVolunteerName").textContent = volunteerName;
+        document.getElementById("certCampaignTitle").textContent = cert.campaign_title || `Chiến dịch #${cert.campaign_id}`;
+        document.getElementById("certOrgName").textContent = orgName;
+        document.getElementById("certSignOrgName").textContent = orgName;
+        document.getElementById("certHoursBadge").textContent = `${formatPrintHours(cert.total_hours)} GIỜ TÌNH NGUYỆN`;
+        document.getElementById("certCodeValue").textContent = cert.certificate_code;
+        document.getElementById("certIssuedAtValue").textContent = formatIssueDate(cert.issued_at);
+
+        document.title = `Chứng nhận ${cert.certificate_code} - VolunteerLink`;
+        document.getElementById("certLoadingState").hidden = true;
+        document.getElementById("certSheet").hidden = false;
+        if (printBtn) printBtn.disabled = false;
+      } catch (error) {
+        const msg = error?.response?.data?.detail || "Không thể tải dữ liệu chứng nhận từ máy chủ.";
+        showError("Lỗi kết nối", msg);
+      }
+    });
+  </script>
+</body>
+</html>
