@@ -30,7 +30,8 @@
           <input
             type="search"
             id="filter-keyword"
-            placeholder="Tìm theo tên chiến dịch..."
+            placeholder="Tìm theo tên chiến dịch hoặc địa điểm..."
+            aria-label="Tìm theo tên chiến dịch hoặc địa điểm"
           >
         </div>
 
@@ -39,6 +40,16 @@
         <!-- Dropdown: Lĩnh vực (category lấy động từ DB) -->
         <select id="filter-category" class="vl-select" aria-label="Lĩnh vực">
           <option value="">Tất cả lĩnh vực</option>
+        </select>
+
+        <div class="search-divider"></div>
+
+        <!-- Dropdown: Trạng thái chiến dịch công khai -->
+        <select id="filter-status" class="vl-select" aria-label="Trạng thái chiến dịch">
+          <option value="">Tất cả trạng thái</option>
+          <option value="OPEN">Đang mở đăng ký</option>
+          <option value="CLOSED">Đã đóng đăng ký</option>
+          <option value="COMPLETED">Đã hoàn thành</option>
         </select>
 
         <button type="submit" class="btn btn-primary search-submit-btn">

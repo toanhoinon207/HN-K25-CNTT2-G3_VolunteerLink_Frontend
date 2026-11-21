@@ -489,19 +489,33 @@
 
       <div class="ud-card" id="volWaitlistWrap" hidden>
         <div class="ud-card-header">
-          <h2>Danh sách chờ chiến dịch</h2>
+          <div>
+            <h2 id="orgWaitlistTitle">Danh sách chờ theo chiến dịch</h2>
+            <p class="org-wl-subtitle">Chọn chiến dịch ở bộ lọc phía trên để xem thứ tự hàng chờ và hạn phản hồi 24 giờ.</p>
+          </div>
           <button type="button" class="btn btn-outline btn-sm org-icon-btn" onclick="refreshVolunteerSection()" aria-label="Làm mới danh sách chờ" title="Làm mới">
             <svg class="svg-icon" aria-hidden="true" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
           </button>
         </div>
-        <div class="table-wrapper" tabindex="0" role="region" aria-label="Danh sách chờ chiến dịch">
-          <table class="ud-table">
+
+        <div class="org-waitlist-summary" aria-label="Tóm tắt trạng thái hàng chờ">
+          <div class="org-wl-pills">
+            <span class="org-wl-pill org-wl-pill--invited">Đang mời: <strong id="orgWlInvitedCount">0</strong></span>
+            <span class="org-wl-pill org-wl-pill--waiting">Đang chờ: <strong id="orgWlWaitingCount">0</strong></span>
+            <span class="org-wl-pill org-wl-pill--done">Đã phản hồi / Hết hạn: <strong id="orgWlDoneCount">0</strong></span>
+          </div>
+          <span class="org-wl-rule-note">Hệ thống tự động mời người kế tiếp khi có suất trống (hạn phản hồi 24h).</span>
+        </div>
+
+        <div class="table-wrapper" tabindex="0" role="region" aria-labelledby="orgWaitlistTitle">
+          <table class="ud-table org-table-fixed org-waitlist-table">
             <thead>
               <tr>
-                <th scope="col">Thứ tự / TNV</th>
-                <th scope="col">Chiến dịch</th>
-                <th scope="col">Trạng thái hàng chờ</th>
-                <th scope="col">Thời gian vào chờ</th>
+                <th scope="col" style="width: 22%;">Vị trí / Tình nguyện viên</th>
+                <th scope="col" style="width: 26%;">Chiến dịch</th>
+                <th scope="col" style="width: 16%;">Trạng thái hàng chờ</th>
+                <th scope="col" style="width: 20%;">Hạn phản hồi / Còn lại</th>
+                <th scope="col" style="width: 16%;">Thời gian vào chờ</th>
               </tr>
             </thead>
             <tbody id="orgWaitlistTbody"></tbody>

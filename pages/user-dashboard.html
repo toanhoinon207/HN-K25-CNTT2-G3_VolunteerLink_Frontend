@@ -32,6 +32,11 @@
           <span class="ud-nav-badge" id="myRegsCountBadge">0</span>
         </button>
 
+        <button type="button" role="tab" id="tab-btn-waitlist" class="dash-nav-item ud-tab-btn" data-tab="waitlist" aria-selected="false">
+          <span>Danh sách chờ</span>
+          <span class="ud-nav-badge" id="myWaitlistCountBadge">0</span>
+        </button>
+
         <button type="button" role="tab" id="tab-btn-attendance" class="dash-nav-item ud-tab-btn" data-tab="attendance" aria-selected="false">
           <span>Điểm danh</span>
         </button>
@@ -206,6 +211,92 @@
               </tr>
             </thead>
             <tbody id="myRegistrationsTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB: WAITLIST (DANH SÁCH CHỜ) -->
+    <section class="tab-panel ud-panel" id="tab-waitlist" role="tabpanel" aria-labelledby="tab-btn-waitlist" hidden>
+      <div class="ud-page-header">
+        <div>
+          <h1>Danh sách chờ của tôi</h1>
+          <p>Theo dõi vị trí trong hàng chờ và phản hồi lời mời tham gia khi chiến dịch có suất trống.</p>
+        </div>
+        <button type="button" class="btn btn-outline btn-sm" id="refreshMyWaitlistBtn" aria-label="Làm mới danh sách chờ">
+          <svg class="svg-icon" aria-hidden="true" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          <span>Làm mới</span>
+        </button>
+      </div>
+
+      <!-- KPI tóm tắt hàng chờ -->
+      <div class="wl-kpi-grid">
+        <div class="ud-kpi-card wl-kpi-card--urgent">
+          <div class="ud-kpi-top">
+            <span class="ud-kpi-label">Lời mời cần phản hồi</span>
+            <span class="ud-kpi-icon ud-kpi-icon--accent" aria-hidden="true">
+              <svg class="svg-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </span>
+          </div>
+          <div>
+            <div class="ud-kpi-value" id="wlStatInvited">0</div>
+            <div class="ud-kpi-meta">Phản hồi trong vòng 24 giờ</div>
+          </div>
+        </div>
+
+        <div class="ud-kpi-card">
+          <div class="ud-kpi-top">
+            <span class="ud-kpi-label">Đang trong hàng chờ</span>
+            <span class="ud-kpi-icon ud-kpi-icon--info" aria-hidden="true">
+              <svg class="svg-icon" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            </span>
+          </div>
+          <div>
+            <div class="ud-kpi-value" id="wlStatWaiting">0</div>
+            <div class="ud-kpi-meta">Tự động mời theo thứ tự</div>
+          </div>
+        </div>
+
+        <div class="ud-kpi-card">
+          <div class="ud-kpi-top">
+            <span class="ud-kpi-label">Đã chấp nhận suất</span>
+            <span class="ud-kpi-icon" aria-hidden="true">
+              <svg class="svg-icon" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            </span>
+          </div>
+          <div>
+            <div class="ud-kpi-value" id="wlStatAccepted">0</div>
+            <div class="ud-kpi-meta">Đã được duyệt tham gia</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Khối lời mời ưu tiên cần phản hồi (INVITED) -->
+      <div class="wl-invite-stack" id="userWaitlistInviteSection" aria-live="polite"></div>
+
+      <!-- Bảng toàn bộ danh sách chờ & lịch sử -->
+      <div class="ud-card">
+        <div class="ud-card-header wl-card-header-wrap">
+          <h2 id="userWaitlistTableTitle">Danh sách hàng chờ &amp; Lịch sử</h2>
+          <div class="wl-filter-chips" role="group" aria-label="Lọc trạng thái danh sách chờ">
+            <button type="button" class="wl-filter-chip active" data-wl-filter="ALL">Tất cả</button>
+            <button type="button" class="wl-filter-chip" data-wl-filter="INVITED">Cần phản hồi</button>
+            <button type="button" class="wl-filter-chip" data-wl-filter="WAITING">Đang chờ</button>
+            <button type="button" class="wl-filter-chip" data-wl-filter="HISTORY">Lịch sử</button>
+          </div>
+        </div>
+        <div class="table-wrapper" tabindex="0" role="region" aria-labelledby="userWaitlistTableTitle">
+          <table class="ud-table wl-table">
+            <thead>
+              <tr>
+                <th scope="col">Vị trí</th>
+                <th scope="col">Chiến dịch</th>
+                <th scope="col">Trạng thái</th>
+                <th scope="col">Thời gian còn lại / Hạn</th>
+                <th scope="col">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody id="myWaitlistTbody"></tbody>
           </table>
         </div>
       </div>

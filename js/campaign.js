@@ -42,7 +42,7 @@ function renderCampaignGrid(items) {
     listContainer.innerHTML = `
       <div class="home-state-box">
         <strong class="campaign-empty-title">Không tìm thấy chiến dịch phù hợp</strong>
-        <span>Hãy thử thay đổi từ khóa hoặc lĩnh vực tìm kiếm.</span>
+        <span>Hãy thử thay đổi từ khóa, địa điểm, lĩnh vực hoặc trạng thái tìm kiếm.</span>
       </div>
     `;
     return;
@@ -84,15 +84,17 @@ async function loadCampaigns(page = 1, shouldScrollTop = false) {
   currentPage = Math.max(1, page);
   const keyword = document.getElementById("filter-keyword")?.value.trim() || "";
   const category = document.getElementById("filter-category")?.value.trim() || "";
+  const status = document.getElementById("filter-status")?.value.trim() || "";
 
   // Lần tải đầu không có filter: lấy page_size=100 để vừa dựng category từ DB vừa hiển thị trang 1 (1 request duy nhất)
-  const isInitialFetch = !categoriesLoaded && currentPage === 1 && !keyword && !category;
+  const isInitialFetch = !categoriesLoaded && currentPage === 1 && !keyword && !category && !status;
   const params = {
     page: currentPage,
     page_size: isInitialFetch ? 100 : PAGE_SIZE,
   };
   if (keyword) params.keyword = keyword;
   if (category) params.category = category;
+  if (status) params.status = status;
 
   Layout.renderStateBox(listContainer, "Đang tải danh sách chiến dịch...", "home-state-box--loading");
 
@@ -132,6 +134,10 @@ document.addEventListener("DOMContentLoaded", () => {
   Layout.renderPublicShell("btnCampaignLogout");
 
   document.getElementById("filter-category")?.addEventListener("change", () => {
+    loadCampaigns(1);
+  });
+
+  document.getElementById("filter-status")?.addEventListener("change", () => {
     loadCampaigns(1);
   });
 
