@@ -2111,7 +2111,6 @@ async function renderCertificatesAndClaims() {
   }
 
   // Render Certificates
-  const certs = DataStore.getCertificates();
   if (orgIssuedCertsTbody) {
     let certs;
     try {

@@ -67,8 +67,8 @@ function updateRegisterButtonState(campaign, remainingSlots) {
     registerBtn.disabled = true;
     registerBtn.textContent = "Đã hết hạn đăng ký";
   } else if (remainingSlots <= 0) {
-    registerBtn.disabled = true;
-    registerBtn.textContent = "Đã đủ số lượng";
+    registerBtn.disabled = false;
+    registerBtn.textContent = "Đăng ký vào danh sách chờ";
   } else {
     registerBtn.disabled = false;
     registerBtn.textContent = "Đăng ký tham gia";
@@ -387,13 +387,21 @@ async function handleRegisterCampaign() {
   registerBtn.textContent = "Đang gửi đăng ký...";
 
   try {
-    await api.post("/registrations/", {
+    const result = await api.post("/registrations/", {
       campaign_id: Number(currentCampaign.id),
       message: null,
     });
     hasRegisteredInSession = true;
     if (typeof showToast === "function") {
-      showToast("Đăng ký tham gia chiến dịch thành công!", "success");
+      const status = result.data?.status;
+      const message = status === "WAITLISTED"
+        ? "Đã vào danh sách chờ. Bạn sẽ nhận lời mời khi đến lượt."
+        : status === "PENDING"
+          ? "Đã gửi yêu cầu. Đang chờ tổ chức xét duyệt."
+          : status === "APPROVED"
+            ? "Đăng ký đã được duyệt."
+            : "Yêu cầu đã được ghi nhận.";
+      showToast(message, "success");
     }
     registerBtn.textContent = "Đã gửi đăng ký";
     await loadCampaignDetail();

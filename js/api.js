@@ -21,41 +21,61 @@ api.interceptors.request.use(
     (error) => Promise.reject(error)
 );
 
-// 2. Response Interceptor: Bắt lỗi HTTP 401 (Hết hạn token / Chưa xác thực) -> Tự động đăng xuất
+// Giữ một tác vụ refresh duy nhất khi nhiều API cùng bị 401.
+let refreshInFlight = null;
+
+function clearExpiredSession() {
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
+    localStorage.removeItem("auth_user");
+    const inPages = window.location.pathname.includes("/pages/");
+    const currentFile = window.location.pathname.split("/").pop();
+    if (currentFile !== "login.html") {
+        const loginUrl = inPages ? "login.html" : "pages/login.html";
+        window.location.replace(loginUrl);
+    }
+}
+
+// Chỉ retry request gốc một lần; không refresh các endpoint xác thực.
 api.interceptors.response.use(
-    (response) => response,
-
-    (error) => {
-        const status = error.response?.status;
-        const url = error.config?.url || "";
-
-        // Không tự chuyển trang nếu lỗi xảy ra từ chính API đăng nhập hoặc đăng ký
-        const isAuthRequest =
-            url.includes("/auth/login") ||
-            url.includes("/auth/register");
-
-        if (status === 401 && !isAuthRequest) {
-            // Xóa sạch session trong localStorage
-            localStorage.removeItem("access_token");
-            localStorage.removeItem("refresh_token");
-            localStorage.removeItem("auth_user");
-
-            if (typeof showToast === "function") {
-                showToast("Phiên đăng nhập đã hết hạn (401 Unauthorized). Đang đăng xuất...", "error");
-            }
-
-            // Chuyển hướng an toàn về login.html
-            const inPages = window.location.pathname.includes("/pages/");
-            const currentFile = window.location.pathname.split("/").pop();
-
-            if (!currentFile.includes("login.html")) {
-                const loginUrl = inPages ? "login.html" : "pages/login.html";
-                setTimeout(() => {
-                    window.location.replace(loginUrl);
-                }, 600);
-            }
+    response => response,
+    async error => {
+        const original = error.config;
+        const url = original?.url || "";
+        const excluded = ["/auth/login", "/auth/register", "/auth/refresh", "/auth/logout"]
+            .some(path => url.includes(path));
+        if (error.response?.status !== 401 || !original || original._retry || excluded) {
+            return Promise.reject(error);
         }
-
-        return Promise.reject(error);
+        const refreshToken = localStorage.getItem("refresh_token");
+        if (!refreshToken) {
+            clearExpiredSession();
+            return Promise.reject(error);
+        }
+        original._retry = true;
+        const latestAccess = localStorage.getItem("access_token");
+        const sentAccess = original.headers?.Authorization?.replace(/^Bearer\s+/i, "");
+        if (latestAccess && sentAccess && latestAccess !== sentAccess) {
+            original.headers.Authorization = `Bearer ${latestAccess}`;
+            return api(original);
+        }
+        if (!refreshInFlight) {
+            // axios gốc không sử dụng interceptor của instance api.
+            refreshInFlight = axios.post(`${CONFIG.API_BASE_URL}/auth/refresh`, {
+                refresh_token: refreshToken,
+            }).then(({ data }) => {
+                localStorage.setItem("access_token", data.access_token);
+                localStorage.setItem("refresh_token", data.refresh_token);
+                return data.access_token;
+            }).finally(() => { refreshInFlight = null; });
+        }
+        try {
+            const newToken = await refreshInFlight;
+            original.headers.Authorization = `Bearer ${newToken}`;
+            return api(original);
+        } catch (refreshError) {
+            clearExpiredSession();
+            return Promise.reject(refreshError);
+        }
     }
 );
