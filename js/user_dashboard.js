@@ -235,6 +235,8 @@ function setupMyWaitlist() {
     renderMyWaitlist();
   }));
   document.getElementById("tab-waitlist")?.addEventListener("click", (event) => {
+    const leave = event.target.closest("[data-wl-leave]");
+    if (leave) { leaveMyWaitlist(leave.dataset.wlLeave); return; }
     const button = event.target.closest("[data-wl-response]");
     if (!button) return;
     respondMyWaitlist(button.dataset.wlEntry, button.dataset.wlResponse);
@@ -300,8 +302,15 @@ function renderMyWaitlist() {
     return `<tr><td><span class="wl-position-badge">${escapeHtml(position)}</span></td>
       <td><div class="td-title">${title(e)}</div><div class="td-subtitle">Vào hàng chờ: ${escapeHtml(safeFormatDateTime(e.created_at))}</div></td>
       <td><span class="status-pill ${cls}">${escapeHtml(e.status === "INVITED" && !isActiveWaitlistInvite(e) ? "Đã quá hạn" : label)}</span></td>
-      <td>${deadline}</td><td>${e.status === "INVITED" ? actions(e) : "—"}</td></tr>`;
+      <td>${deadline}</td><td>${e.status === "INVITED" ? actions(e) : ""}${["WAITING", "INVITED"].includes(e.status) ? `<button type="button" class="btn btn-outline btn-sm" data-wl-leave="${e.campaign_id}">Rời hàng chờ</button>` : "—"}</td></tr>`;
   }).join("") : `<tr><td colspan="5" style="text-align:center;padding:28px;">Không có mục nào phù hợp.</td></tr>`;
+}
+
+async function leaveMyWaitlist(campaignId) {
+  const registration = cachedRegistrations.find(r => String(r.campaign_id) === String(campaignId) && r.status === "WAITLISTED");
+  if (!registration) { showToast("Không tìm thấy đơn đang chờ. Hãy tải lại trang.", "error"); return; }
+  if (!window.confirm("Bạn muốn rời danh sách chờ của chiến dịch này?")) return;
+  await cancelMyRegistration(registration.id);
 }
 
 async function respondMyWaitlist(entryId, response) {
@@ -354,8 +363,8 @@ async function loadMyRegistrations() {
         let actionHtml = `<a href="campaign_detail.html?id=${encodeURIComponent(reg.campaign_id)}" class="btn-action">Chi tiết</a>`;
         if (reg.status === "APPROVED") {
           actionHtml = `<button type="button" class="btn-action btn-action-primary" onclick="goToAttendance(${Number(reg.campaign_id)})">Điểm danh</button>`;
-        } else if (reg.status === "PENDING") {
-          actionHtml = `<button type="button" class="btn-action" onclick="cancelMyRegistration(${Number(reg.id)})">Hủy đơn</button>`;
+        } else if (reg.status === "PENDING" || reg.status === "WAITLISTED") {
+          actionHtml = `<button type="button" class="btn-action" onclick="cancelMyRegistration(${Number(reg.id)})">${reg.status === "WAITLISTED" ? "Rời hàng chờ" : "Hủy đơn"}</button>`;
         }
 
         return `
@@ -386,7 +395,7 @@ async function cancelMyRegistration(registrationId) {
   try {
     await api.patch(`/registrations/${registrationId}/cancel`);
     showToast("Đã hủy đơn đăng ký thành công.", "success");
-    await loadMyRegistrations();
+    await Promise.all([loadMyRegistrations(), loadMyWaitlist()]);
   } catch (error) {
     showToast(extractApiError(error, "Không thể hủy đơn đăng ký."), "error");
   }
@@ -700,13 +709,29 @@ async function loadHourClaims() {
             <td class="td-title">${escapeHtml(title)}</td>
             <td><strong>+${Number(cl.claimed_hours || 0)}h</strong></td>
             <td style="color:var(--text-muted);">${escapeHtml(cl.note || cl.rejection_reason || "—")}</td>
-            <td><span class="status-pill ${st.cls}">${escapeHtml(st.label)}</span></td>
+            <td><span class="status-pill ${st.cls}">${escapeHtml(st.label)}</span>
+              ${cl.status === "REJECTED" && !cl.appeal_status ? `<button type="button" class="btn-action" onclick="appealHourClaim(${Number(cl.id)})">Gửi khiếu nại</button>` : ""}
+              ${cl.appeal_status ? `<div class="td-subtitle">Khiếu nại: ${escapeHtml(cl.appeal_status)}</div>` : ""}
+            </td>
           </tr>
         `;
       })
       .join("");
   } catch (error) {
     tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--danger);">${escapeHtml(extractApiError(error, "Không thể tải khiếu nại giờ."))}</td></tr>`;
+  }
+}
+
+async function appealHourClaim(claimId) {
+  const reason = window.prompt("Nhập lý do khiếu nại kết quả xác minh giờ:");
+  if (reason === null) return;
+  if (!reason.trim()) { showToast("Vui lòng nhập lý do khiếu nại.", "warning"); return; }
+  try {
+    await api.post(`/hour-claims/${claimId}/appeals`, { appeal_reason: reason.trim() });
+    showToast("Đã gửi khiếu nại đến quản trị viên.", "success");
+    await loadHourClaims();
+  } catch (error) {
+    showToast(extractApiError(error, "Không thể gửi khiếu nại."), "error");
   }
 }
 
