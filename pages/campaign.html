@@ -60,6 +60,7 @@
 
     <!-- Danh Sách Chiến Dịch (Bố cục 2 hàng x 3 cột lấy từ GET /api/campaigns) -->
     <section class="campaign-list-section">
+      <h2 class="visually-hidden">Danh sách chiến dịch</h2>
       <div class="campaign-grid-wrapper" id="campaign-grid-wrapper">
         <button
           type="button"
@@ -87,12 +88,15 @@
           </svg>
         </button>
       </div>
+      <div id="campaignPageIndicator" class="campaign-page-indicator" aria-live="polite"></div>
     </section>
 
     <!-- Template dùng chung cho thẻ chiến dịch -->
     <template id="campaign-card-template">
       <article class="campaign-card">
-        <img src="" alt="" class="campaign-card-img">
+        <div class="campaign-card-media">
+          <img src="../assets/images/logo.svg" alt="" class="campaign-card-img" loading="lazy">
+        </div>
         <div class="campaign-card-body">
           <div class="campaign-card-badges">
             <span class="badge badge-primary card-category"></span>
@@ -103,8 +107,14 @@
           </h3>
           <p class="campaign-card-desc"></p>
           <div class="campaign-card-info">
-            <div>📍 <strong>Địa điểm:</strong> <span class="card-location"></span></div>
-            <div>🏢 <strong>Tổ chức:</strong> <span class="card-org"></span></div>
+            <div class="campaign-card-info-row">
+              <svg class="svg-icon svg-icon-xs" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+              <strong>Địa điểm:</strong> <span class="card-location"></span>
+            </div>
+            <div class="campaign-card-info-row">
+              <svg class="svg-icon svg-icon-xs" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4"/></svg>
+              <strong>Tổ chức:</strong> <span class="card-org"></span>
+            </div>
           </div>
           <a href="" class="btn btn-primary btn-block card-detail-btn">Xem chi tiết</a>
         </div>

@@ -101,6 +101,10 @@
           </button>
 
           <div class="ud-user-dropdown" id="userDropdownMenu" role="menu" aria-labelledby="userMenuBtn" hidden>
+            <a href="campaign.html" role="menuitem" class="ud-dropdown-item" style="text-decoration: none;">
+              <svg class="svg-icon svg-icon-xs" aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <span>Khám phá chiến dịch</span>
+            </a>
             <button type="button" role="menuitem" class="ud-dropdown-item" id="menuProfileBtn">
               <svg class="svg-icon svg-icon-xs" aria-hidden="true" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
               <span>Hồ sơ &amp; Kỹ năng</span>
@@ -178,14 +182,14 @@
 
           <div class="ud-kpi-card">
             <div class="ud-kpi-top">
-              <span class="ud-kpi-label">Chuyên cần</span>
+              <span class="ud-kpi-label">Đơn đã duyệt</span>
               <span class="ud-kpi-icon ud-kpi-icon--accent" aria-hidden="true">
-                <svg class="svg-icon" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                <svg class="svg-icon" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
               </span>
             </div>
             <div>
-              <div class="ud-kpi-value">100%</div>
-              <div class="ud-kpi-meta">Tỷ lệ hoàn thành ca</div>
+              <div class="ud-kpi-value" id="statApprovedRegs">0</div>
+              <div class="ud-kpi-meta">Chiến dịch sẵn sàng tham gia</div>
             </div>
           </div>
         </div>
@@ -195,7 +199,7 @@
       <div class="ud-card">
         <div class="ud-card-header">
           <h2 id="myRegsTableTitle">Danh sách ca đăng ký của tôi</h2>
-          <button type="button" class="btn btn-outline btn-sm org-icon-btn" onclick="renderMyRegistrations()" aria-label="Làm mới danh sách ca đăng ký" title="Làm mới">
+          <button type="button" id="refreshMyRegsBtn" class="btn btn-outline btn-sm org-icon-btn" onclick="renderMyRegistrations(true)" aria-label="Làm mới danh sách ca đăng ký" title="Làm mới">
             <svg class="svg-icon" aria-hidden="true" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
           </button>
         </div>
@@ -223,9 +227,8 @@
           <h1>Danh sách chờ của tôi</h1>
           <p>Theo dõi vị trí trong hàng chờ và phản hồi lời mời tham gia khi chiến dịch có suất trống.</p>
         </div>
-        <button type="button" class="btn btn-outline btn-sm" id="refreshMyWaitlistBtn" aria-label="Làm mới danh sách chờ">
+        <button type="button" class="btn btn-outline btn-sm org-icon-btn" id="refreshMyWaitlistBtn" aria-label="Làm mới danh sách chờ" title="Làm mới">
           <svg class="svg-icon" aria-hidden="true" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-          <span>Làm mới</span>
         </button>
       </div>
 
@@ -442,6 +445,9 @@
       <div class="ud-card">
         <div class="ud-card-header">
           <h2 id="claimsTableTitle">Lịch sử khiếu nại giờ</h2>
+          <button type="button" id="refreshHourClaimsBtn" class="btn btn-outline btn-sm org-icon-btn" onclick="loadHourClaims(true)" aria-label="Làm mới lịch sử khiếu nại giờ" title="Làm mới">
+            <svg class="svg-icon" aria-hidden="true" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          </button>
         </div>
         <div class="table-wrapper" tabindex="0" role="region" aria-labelledby="claimsTableTitle">
           <table class="ud-table">
@@ -451,6 +457,7 @@
                 <th scope="col">Giờ đề nghị</th>
                 <th scope="col">Lý do &amp; Minh chứng</th>
                 <th scope="col">Trạng thái</th>
+                <th scope="col">Thao tác</th>
               </tr>
             </thead>
             <tbody id="claimsTbody"></tbody>
@@ -616,6 +623,27 @@
       <div class="dash-modal-footer">
         <button type="button" class="btn btn-outline" onclick="closeModal('claimModal')">Hủy</button>
         <button type="button" class="btn btn-primary" onclick="submitHourClaim()">Gửi yêu cầu</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: KHIẾU NẠI KẾT QUẢ XÁC MINH GIỜ -->
+  <div class="dash-modal-backdrop" id="hourAppealModal" role="dialog" aria-modal="true" aria-labelledby="hourAppealModalTitle">
+    <div class="dash-modal">
+      <div class="dash-modal-header">
+        <h3 id="hourAppealModalTitle">Khiếu nại kết quả xác minh giờ</h3>
+        <button type="button" class="dash-modal-close" aria-label="Đóng hộp thoại" onclick="closeModal('hourAppealModal')">&times;</button>
+      </div>
+      <div class="dash-modal-body">
+        <input type="hidden" id="hourAppealClaimId">
+        <div class="ud-field" style="margin-block-end: 0;">
+          <label for="hourAppealReasonInput">Lý do khiếu nại <span aria-hidden="true">*</span></label>
+          <textarea id="hourAppealReasonInput" class="ud-control" rows="3" placeholder="Nêu rõ lý do và thông tin đối chiếu gửi quản trị viên..."></textarea>
+        </div>
+      </div>
+      <div class="dash-modal-footer">
+        <button type="button" class="btn btn-outline" onclick="closeModal('hourAppealModal')">Hủy</button>
+        <button type="button" class="btn btn-primary" id="confirmHourAppealBtn" onclick="submitHourClaimAppeal()">Gửi khiếu nại</button>
       </div>
     </div>
   </div>

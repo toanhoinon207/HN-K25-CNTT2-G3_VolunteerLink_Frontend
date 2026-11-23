@@ -84,7 +84,6 @@ registerForm.addEventListener("submit", async function (event) {
             role: role
         });
 
-        console.log("Đăng ký thành công từ Backend:", response.data);
         showToast("Đăng ký tài khoản Tình nguyện viên thành công!", "success");
 
         setTimeout(() => {
@@ -92,44 +91,19 @@ registerForm.addEventListener("submit", async function (event) {
         }, 1200);
 
     } catch (error) {
-        console.warn("Lỗi đăng ký Backend, kiểm tra fallback:", error);
+        const detail = error.response?.data?.detail;
 
-        // Fallback khi server chưa bật: lưu tài khoản vào DataStore
-        if (!error.response || error.code === "ERR_NETWORK" || error.message.includes("Network Error")) {
-            const users = DataStore.getUsers();
-            if (users.some(u => u.email.toLowerCase() === email.toLowerCase())) {
-                showToast("Email này đã được sử dụng!", "error");
-            } else {
-                const newUser = {
-                    id: Date.now(),
-                    full_name: name,
-                    email: email,
-                    phone: phone,
-                    role: role,
-                    status: "ACTIVE",
-                    created_at: new Date().toISOString()
-                };
-                users.push(newUser);
-                DataStore.set(DataStore.STORAGE_KEYS.USERS, users);
-                showToast("Đăng ký tài khoản thành công! Vui lòng đăng nhập.", "success");
-                setTimeout(() => {
-                    window.location.href = "login.html";
-                }, 1000);
-                return;
-            }
+        if (!error.response) {
+            showToast("Không thể kết nối đến máy chủ. Vui lòng thử lại sau.", "error");
+        } else if (error.response?.status === 422) {
+            showToast("Dữ liệu không hợp lệ! Mật khẩu hoặc email chưa đúng quy cách.", "error");
         } else {
-            const detail = error.response?.data?.detail;
-
-            if (error.response?.status === 422) {
-                showToast("Dữ liệu không hợp lệ! Mật khẩu hoặc email chưa đúng quy cách.", "error");
-            } else {
-                showToast(
-                    typeof detail === "string"
-                        ? detail
-                        : "Đăng ký thất bại. Vui lòng thử lại!",
-                    "error"
-                );
-            }
+            showToast(
+                typeof detail === "string"
+                    ? detail
+                    : "Đăng ký thất bại. Vui lòng thử lại!",
+                "error"
+            );
         }
     } finally {
         submitBtn.disabled = false;

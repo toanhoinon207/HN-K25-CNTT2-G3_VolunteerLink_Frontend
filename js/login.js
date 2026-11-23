@@ -49,13 +49,13 @@ window.quickFillRole = function (role) {
 
     if (role === "USER") {
         emailInput.value = "user@gmail.com";
-        passInput.value = "User@123456";
+        passInput.value = "12345678";
     } else if (role === "ORGANIZER") {
         emailInput.value = "organizer@gmail.com";
-        passInput.value = "Organizer@123456";
+        passInput.value = "12345678";
     } else if (role === "ADMIN") {
         emailInput.value = "admin@gmail.com";
-        passInput.value = "Admin@123456";
+        passInput.value = "12345678";
     }
 
     if (typeof showToast === "function") {
@@ -120,7 +120,6 @@ loginForm.addEventListener("submit", async function (event) {
         // 6. Gọi Backend thông qua Auth.login (POST /api/auth/login + GET /api/auth/me)
         const user = await Auth.login(email, password);
 
-        console.log("Đăng nhập thành công từ Backend:", user);
         showToast(`Đăng nhập thành công! Xin chào ${user.full_name}`, "success");
 
         // 7. Chuyển trang theo URL redirect nội bộ an toàn hoặc Bảng điều khiển theo Role

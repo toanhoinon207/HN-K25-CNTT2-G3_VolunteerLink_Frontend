@@ -51,6 +51,13 @@
   background-color: var(--surface-alt);
 }
 
+.detail-banner.is-fallback {
+  height: 200px;
+  object-fit: contain;
+  padding: 32px;
+  background-color: var(--primary-light);
+}
+
 .detail-body {
   padding: 28px;
 }
@@ -90,9 +97,16 @@
 }
 
 .detail-info-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 0.78rem;
   color: var(--text-muted);
   font-weight: 600;
+}
+
+.detail-info-label .svg-icon {
+  color: var(--primary);
 }
 
 .detail-info-value {
@@ -191,6 +205,17 @@
   gap: 10px;
   font-size: 0.86rem;
   color: var(--text-muted);
+}
+
+.reg-meta-list li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.reg-meta-list li .svg-icon {
+  color: var(--primary);
 }
 
 .reg-meta-list strong {

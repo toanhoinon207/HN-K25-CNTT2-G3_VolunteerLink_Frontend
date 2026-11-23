@@ -171,13 +171,22 @@
   background-color: var(--primary);
   color: #FFFFFF;
   border-color: var(--primary);
-  box-shadow: 0 6px 18px rgba(30, 126, 85, 0.3);
+  box-shadow: var(--shadow-md);
   transform: translateY(-50%) scale(1.08) !important;
 }
 
 .floating-page-btn:disabled {
   opacity: 0.4 !important;
   cursor: not-allowed;
+}
+
+.campaign-page-indicator {
+  margin-top: 20px;
+  text-align: center;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---------- Responsive ---------- */

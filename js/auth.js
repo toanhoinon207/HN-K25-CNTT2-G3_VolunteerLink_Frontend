@@ -33,18 +33,10 @@ const Auth = {
 
     // 4. Gọi API lấy thông tin người dùng hiện tại (/auth/me)
     async getMe() {
-        try {
-            const response = await api.get("/auth/me");
-            const user = response.data;
-            localStorage.setItem("auth_user", JSON.stringify(user));
-            return user;
-        } catch (error) {
-            const cachedUser = this.getUser();
-            if (cachedUser && cachedUser.email) {
-                return cachedUser;
-            }
-            throw error;
-        }
+        const response = await api.get("/auth/me");
+        const user = response.data;
+        localStorage.setItem("auth_user", JSON.stringify(user));
+        return user;
     },
 
     // 5. Đăng nhập với Backend FastAPI
@@ -71,11 +63,32 @@ const Auth = {
         localStorage.removeItem("auth_user");
     },
 
-    // 7. Đăng xuất và chuyển hướng về trang đăng nhập
+    // 7. Hộp thoại xác nhận & đăng xuất dùng chung
+    async confirmLogout() {
+        const confirmed = typeof VLModal !== "undefined" && typeof VLModal.confirm === "function"
+            ? await VLModal.confirm({
+                title: "Xác nhận đăng xuất",
+                message: "Bạn có chắc chắn muốn đăng xuất khỏi tài khoản VolunteerLink?",
+                confirmText: "Đăng xuất",
+                cancelText: "Hủy",
+                danger: true
+            })
+            : window.confirm("Bạn có chắc chắn muốn đăng xuất khỏi tài khoản VolunteerLink?");
+        if (!confirmed) return false;
+
+        try {
+            if (typeof api !== "undefined") await api.post("/auth/logout");
+        } catch {
+            // Vẫn xóa session cục bộ nếu token đã hết hạn hoặc mất kết nối
+        }
+        return true;
+    },
+
+    // 7b. Xóa phiên cục bộ và chuyển hướng mặc định về trang chủ (replace để chặn quay lại)
     logout() {
         this.clearSession();
         const inPages = window.location.pathname.includes("/pages/");
-        window.location.href = inPages ? "login.html" : "pages/login.html";
+        window.location.replace(inPages ? "home.html" : "pages/home.html");
     },
 
     // 8. Kiểm tra xem người dùng đã đăng nhập hay chưa (Có token không)
@@ -105,6 +118,7 @@ const Auth = {
 
     // 10. Chặn trang cần đăng nhập & kiểm tra phân quyền (Route Guard)
     async requireAuth(allowedRoles = []) {
+        window.__vlAuthRequired = true;
         const inPages = window.location.pathname.includes("/pages/");
         const currentFile = window.location.pathname.split("/").pop();
 
@@ -140,3 +154,10 @@ const Auth = {
         }
     }
 };
+
+window.addEventListener("pageshow", (event) => {
+    if ((event.persisted || window.__vlAuthRequired) && window.__vlAuthRequired && !Auth.isLoggedIn()) {
+        const inPages = window.location.pathname.includes("/pages/");
+        window.location.replace(inPages ? "login.html" : "pages/login.html");
+    }
+});

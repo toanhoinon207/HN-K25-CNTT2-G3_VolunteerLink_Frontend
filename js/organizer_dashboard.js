@@ -1,6 +1,6 @@
 /**
  * Logic điều khiển Bảng điều khiển Nhà tổ chức (Role: ORGANIZER)
- * Tích hợp Backend API: /auth/me, /campaigns, /campaigns/{id}/submit, /api/attendances/code, DataStore
+ * Tích hợp Backend API: /auth/me, /campaigns, /campaigns/{id}/submit, /api/attendances/code
  */
 
 let currentUser = null;
@@ -32,6 +32,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   // 4. Khởi tạo Tabs, User Menu, Form Preview, Overview Filters & Mobile menu
   setupTabs();
   setupUserMenu();
+  setupCampaignImagePreview();
+  setupOverviewFilters();
   if (typeof Layout !== "undefined" && typeof Layout.initNotificationBell === "function") {
     Layout.initNotificationBell(currentUser.role || "ORGANIZER");
   }
@@ -41,12 +43,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const logoutBtn = document.getElementById("logoutBtn");
   if (logoutBtn) {
     logoutBtn.addEventListener("click", async () => {
-      try {
-        await api.post("/auth/logout");
-      } catch {
-        // Vẫn xóa session cục bộ nếu token đã hết hạn hoặc mất kết nối
-      }
-      Auth.logout();
+      if (await Auth.confirmLogout()) Auth.logout();
     });
   }
 
@@ -84,20 +81,17 @@ async function loadOrganizerCampaigns() {
       orgCampaignsLoaded = true;
       return;
     }
+    orgCampaigns = [];
+    orgCampaignsLoaded = false;
   } catch (error) {
-    console.warn("Không thể tải /campaigns/mine, dùng fallback DataStore:", error);
+    orgCampaigns = [];
+    orgCampaignsLoaded = false;
+    showToast(Layout.extractApiErrorMessage(error, "Không thể tải danh sách chiến dịch."), "error");
   }
-  orgCampaigns = DataStore.getCampaigns().filter(
-    (c) => c.organization_id === currentOrg?.id || c.organization_name === currentOrg?.name
-  );
-  orgCampaignsLoaded = false;
 }
 
 function getOrgCampaigns() {
-  if (orgCampaignsLoaded) return orgCampaigns;
-  return DataStore.getCampaigns().filter(
-    (c) => c.organization_id === currentOrg?.id || c.organization_name === currentOrg?.name
-  );
+  return orgCampaigns;
 }
 
 function upsertOrgCampaign(campaign) {
@@ -108,46 +102,17 @@ function upsertOrgCampaign(campaign) {
   } else {
     orgCampaigns.unshift(campaign);
   }
-  DataStore.saveCampaign({ ...campaign, organization_name: currentOrg?.name });
 }
 
 async function loadCurrentOrganization() {
-  // Thử lấy từ Backend API trước
   try {
     const res = await api.get("/organizations/me");
-    if (res.data && res.data.id) {
-      currentOrg = res.data;
-      // Đồng bộ lại vào DataStore để các hàm khác dùng
-      const orgs = DataStore.getOrganizations();
-      const idx = orgs.findIndex(o => o.id === currentOrg.id);
-      if (idx !== -1) orgs[idx] = { ...orgs[idx], ...currentOrg };
-      else orgs.push({ ...currentOrg, owner_id: currentUser.id, owner_email: currentUser.email });
-      DataStore.set(DataStore.STORAGE_KEYS.ORGS, orgs);
-    }
+    currentOrg = res.data && res.data.id ? res.data : null;
   } catch (err) {
-    console.warn("Không thể tải tổ chức từ Backend, dùng DataStore:", err);
-    const orgs = DataStore.getOrganizations();
-    currentOrg = orgs.find(o => o.owner_id === currentUser.id || o.owner_email === currentUser.email);
-  }
-
-  if (!currentOrg) {
-    // Tạo tổ chức mặc định nếu chưa có
-    currentOrg = {
-      id: Date.now(),
-      name: "Tổ chức " + (currentUser.full_name || "Mới"),
-      email: currentUser.email,
-      phone: currentUser.phone || "0241234567",
-      address: "Hà Nội",
-      description: "Đơn vị tổ chức các hoạt động tình nguyện xã hội.",
-      owner_id: currentUser.id,
-      owner_email: currentUser.email,
-      status: "APPROVED",
-      document_url: "https://example.com/docs/gp.pdf",
-      created_at: new Date().toISOString()
-    };
-    const orgs = DataStore.getOrganizations();
-    orgs.push(currentOrg);
-    DataStore.set(DataStore.STORAGE_KEYS.ORGS, orgs);
+    currentOrg = null;
+    if (err.response?.status !== 404) {
+      showToast(Layout.extractApiErrorMessage(err, "Không thể tải thông tin tổ chức."), "error");
+    }
   }
 
   renderOrgStatusBanner();
@@ -180,14 +145,18 @@ function renderOrgStatusBanner() {
 
 function setupOrganizerHeader() {
   const fullName = currentUser.full_name || currentUser.name || "Nhà tổ chức";
+  const orgName = currentOrg?.name || "Chưa có hồ sơ tổ chức";
 
-  document.getElementById("headerUserName").textContent = fullName;
+  const userNameEl = document.getElementById("headerUserName");
+  if (userNameEl) userNameEl.textContent = fullName;
   renderAvatarElement(document.getElementById("headerAvatar"), currentUser.avatar_url, fullName);
   renderAvatarElement(document.getElementById("orgAccountAvatarBig"), currentUser.avatar_url, fullName);
   const nameEl = document.getElementById("orgAccountNameDisplay");
   if (nameEl) nameEl.textContent = fullName;
-  document.getElementById("headerOrgName").textContent = currentOrg.name;
-  document.getElementById("overviewOrgTitle").textContent = currentOrg.name;
+  const headerOrgEl = document.getElementById("headerOrgName");
+  if (headerOrgEl) headerOrgEl.textContent = orgName;
+  const overviewOrgEl = document.getElementById("overviewOrgTitle");
+  if (overviewOrgEl) overviewOrgEl.textContent = orgName;
 }
 
 function setupTabs() {
@@ -214,7 +183,9 @@ function setupTabs() {
     });
   });
 
-  const initialTab = new URLSearchParams(window.location.search).get("tab");
+  const rawTab = new URLSearchParams(window.location.search).get("tab");
+  const tabAlias = { registrations: "volunteers", hours: "certificates" };
+  const initialTab = tabAlias[rawTab] || rawTab;
   if (initialTab && document.getElementById("tab-" + initialTab)) {
     switchOrgTab(initialTab);
   }
@@ -595,7 +566,7 @@ function renderTopVolunteers(volunteers) {
 
 function renderOverview() {
   const allCampaigns = getOrgCampaigns();
-  const allApplicants = orgRegistrationsCache.length > 0 ? orgRegistrationsCache : DataStore.getRegistrations();
+  const allApplicants = orgRegistrationsCache;
   const orgCampaignIds = allCampaigns.map(c => c.id);
   const myApplicants = allApplicants.filter(a => orgCampaignIds.includes(a.campaign_id));
 
@@ -621,7 +592,8 @@ function renderOverview() {
 
   // Active Campaign Highlight
   const bannerEl = document.getElementById("orgActiveCampaignBanner");
-  const activeCamp = allCampaigns.find(c => c.status === "OPEN") || allCampaigns[0];
+  const activeCamp = allCampaigns.find(c => Layout.getCampaignDisplayStatus(c) === "IN_PROGRESS") ||
+    allCampaigns.find(c => Layout.getCampaignDisplayStatus(c) === "REGISTRATION_OPEN") || allCampaigns[0];
 
   if (!activeCamp) {
     bannerEl.innerHTML = `<div class="org-empty-inline">Chưa có chiến dịch nào. Hãy tạo chiến dịch mới!</div>`;
@@ -631,8 +603,11 @@ function renderOverview() {
   const registered = Number(activeCamp.registered_count || 0);
   const maxPart = Math.max(1, Number(activeCamp.max_participants || 1));
   const pct = Math.min(100, Math.round((registered / maxPart) * 100));
-  const thumbHtml = activeCamp.image_url
-    ? `<img class="org-spotlight-thumb" src="${escapeHtml(activeCamp.image_url)}" alt="${escapeHtml(activeCamp.title)}" onerror="this.style.display='none'">`
+  const resolvedThumb = typeof resolveBackendAssetUrl === "function"
+    ? resolveBackendAssetUrl(activeCamp.image_url)
+    : (isSafeHttpUrl(activeCamp.image_url) ? activeCamp.image_url : null);
+  const thumbHtml = resolvedThumb
+    ? `<img class="org-spotlight-thumb" src="${escapeHtml(resolvedThumb)}" alt="${escapeHtml(activeCamp.title)}" onerror="this.style.display='none'">`
     : "";
 
   bannerEl.innerHTML = `
@@ -640,7 +615,7 @@ function renderOverview() {
       <div class="org-spotlight-top">
         ${thumbHtml}
         <div class="org-spotlight-info">
-          <span class="status-pill status-${String(activeCamp.status || "OPEN").toLowerCase()}">${escapeHtml(activeCamp.status)}</span>
+          <span class="status-pill status-${String(activeCamp.status || "OPEN").toLowerCase()}">${escapeHtml(Layout.getCampaignStatusInfo(activeCamp).label)}</span>
           <h3 class="org-spotlight-title">${escapeHtml(activeCamp.title)}</h3>
           <div class="org-spotlight-meta">
             <span class="org-spotlight-meta-item">
@@ -722,6 +697,15 @@ function renderCampaignsTable() {
       reasonEl.hidden = false;
     }
 
+    const openDetailHandler = (e) => {
+      e.preventDefault();
+      openCampaignDetailModal(c.id);
+    };
+    const titleLinkEl = cardEl.querySelector(".card-title-link");
+    if (titleLinkEl) titleLinkEl.addEventListener("click", openDetailHandler);
+    const detailBtnEl = cardEl.querySelector(".card-detail-btn");
+    if (detailBtnEl) detailBtnEl.addEventListener("click", openDetailHandler);
+
     fragment.appendChild(cardFrag);
   });
 
@@ -781,8 +765,8 @@ const CAMPAIGN_STATUS_META = {
 
 function toDatetimeLocalValue(value) {
   if (!value) return "";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "";
+  const d = typeof parseApiDate === "function" ? parseApiDate(value) : new Date(value);
+  if (!d || Number.isNaN(d.getTime())) return "";
   const pad = (n) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
@@ -880,6 +864,7 @@ function openCreateCampaignModal() {
   isCampaignEditing = false;
   const now = new Date();
   const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const dayAfterTomorrow = new Date(now.getTime() + 48 * 60 * 60 * 1000);
 
   document.getElementById("createCampaignTitle").textContent = "Tạo chiến dịch mới";
   const codeBadge = document.getElementById("campaignModalCodeBadge");
@@ -903,9 +888,9 @@ function openCreateCampaignModal() {
   document.getElementById("newCampLocation").value = "";
   document.getElementById("newCampMaxPart").value = 30;
   document.getElementById("newCampHours").value = 4;
-  document.getElementById("newCampStart").value = toDatetimeLocalValue(tomorrow);
-  document.getElementById("newCampEnd").value = toDatetimeLocalValue(new Date(tomorrow.getTime() + 4 * 3600000));
-  document.getElementById("newCampDeadline").value = toDatetimeLocalValue(now);
+  document.getElementById("newCampStart").value = toDatetimeLocalValue(dayAfterTomorrow);
+  document.getElementById("newCampEnd").value = toDatetimeLocalValue(new Date(dayAfterTomorrow.getTime() + 4 * 3600000));
+  document.getElementById("newCampDeadline").value = toDatetimeLocalValue(tomorrow);
   document.getElementById("newCampDescription").value = "";
   document.getElementById("newCampRequirements").value = "";
 
@@ -986,7 +971,12 @@ function openCampaignDetailModal(campaignId) {
 
   activeDetailCampaignId = camp.id;
   isCampaignEditing = false;
-  const st = CAMPAIGN_STATUS_META[camp.status] || { label: camp.status, class: "status-draft" };
+  const displayStatus = Layout.getCampaignDisplayStatus(camp);
+  const st = ({
+    IN_PROGRESS: { label: "Đang diễn ra", class: "status-open" },
+    REGISTRATION_CLOSED: { label: "Đã đóng đăng ký", class: "status-closed" },
+    REGISTRATION_OPEN: { label: "Đang mở đăng ký", class: "status-open" },
+  })[displayStatus] || CAMPAIGN_STATUS_META[displayStatus] || { label: displayStatus, class: "status-draft" };
   const isDraft = camp.status === "DRAFT";
   const canCancel = camp.status !== "COMPLETED" && camp.status !== "CANCELLED";
 
@@ -1129,14 +1119,21 @@ function readCampaignFormPayload() {
     return null;
   }
 
+  const normalizeLocalInput = (val) => {
+    const raw = String(val || "").trim();
+    if (!raw) return raw;
+    if (/(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw)) return raw;
+    return (raw.length === 16 ? `${raw}:00` : raw) + "+07:00";
+  };
+
   return {
     title,
     image_url: imageUrl || null,
     category,
     location,
-    start_time: new Date(startTime).toISOString(),
-    end_time: new Date(endTime).toISOString(),
-    registration_deadline: new Date(deadline).toISOString(),
+    start_time: normalizeLocalInput(startTime),
+    end_time: normalizeLocalInput(endTime),
+    registration_deadline: normalizeLocalInput(deadline),
     max_participants: maxPart,
     estimated_hours: hours,
     requirements: requirements || null,
@@ -1160,23 +1157,9 @@ async function submitCreateCampaign() {
     upsertOrgCampaign({ registered_count: 0, ...createdCamp });
     showToast("Tạo chiến dịch thành công (DRAFT) trên Backend!", "success");
   } catch (error) {
-    if (!error.response) {
-      console.warn("Mất kết nối Backend /campaigns, lưu tạm vào Local DataStore:", error);
-      const localCamp = {
-        id: Date.now(),
-        organization_id: currentOrg.id,
-        organization_name: currentOrg.name,
-        ...payload,
-        registered_count: 0,
-        status: "DRAFT",
-      };
-      upsertOrgCampaign(localCamp);
-      showToast("Đã lưu bản nháp chiến dịch (cục bộ).", "success");
-    } else {
-      const msg = Layout.extractApiErrorMessage(error, "Không thể tạo chiến dịch.");
-      showToast(msg, "error");
-      return;
-    }
+    const msg = Layout.extractApiErrorMessage(error, "Không thể tạo chiến dịch.");
+    showToast(msg, "error");
+    return;
   }
 
   closeModal("createCampaignModal");
@@ -1202,16 +1185,6 @@ async function submitUpdateCampaign() {
     closeModal("createCampaignModal");
     refreshCampaignViews();
   } catch (error) {
-    if (!error.response) {
-      const existing = getOrgCampaigns().find((c) => c.id === activeDetailCampaignId);
-      if (existing) {
-        upsertOrgCampaign({ ...existing, ...payload });
-        showToast("Đã lưu cập nhật chiến dịch (cục bộ).", "success");
-        closeModal("createCampaignModal");
-        refreshCampaignViews();
-        return;
-      }
-    }
     const msg = Layout.extractApiErrorMessage(error, "Không thể cập nhật chiến dịch.");
     showToast(msg, "error");
   } finally {
@@ -1240,13 +1213,6 @@ async function submitCancelCampaign() {
     closeModal("createCampaignModal");
     refreshCampaignViews();
   } catch (error) {
-    if (!error.response && camp) {
-      upsertOrgCampaign({ ...camp, status: "CANCELLED", reason: needsReason ? reason : null });
-      showToast(needsReason ? "Đã hủy chiến dịch (cục bộ)." : "Đã xóa chiến dịch (cục bộ).", "success");
-      closeModal("createCampaignModal");
-      refreshCampaignViews();
-      return;
-    }
     const msg = Layout.extractApiErrorMessage(error, "Không thể xóa/hủy chiến dịch.");
     showToast(msg, "error");
   }
@@ -1259,15 +1225,6 @@ async function submitCampaignToAdmin(campaignId) {
     showToast("Đã gửi chiến dịch tới Quản trị viên để phê duyệt!", "success");
     refreshCampaignViews();
   } catch (error) {
-    if (!error.response) {
-      const camp = getOrgCampaigns().find((c) => c.id === campaignId);
-      if (camp) {
-        upsertOrgCampaign({ ...camp, status: "PENDING", reason: null });
-        showToast("Chiến dịch đã chuyển sang trạng thái CHỜ ADMIN DUYỆT (cục bộ)", "success");
-        refreshCampaignViews();
-        return;
-      }
-    }
     const msg = Layout.extractApiErrorMessage(error, "Không thể gửi duyệt chiến dịch.");
     showToast(msg, "error");
   }
@@ -1281,13 +1238,16 @@ function setupAttendanceGenerator() {
 
   const allCampaigns = getOrgCampaigns();
   select.innerHTML = allCampaigns.filter(c => ["OPEN", "CLOSED"].includes(c.status)).map(c => 
-    `<option value="${c.id}">${escapeHtml(c.title)} (${c.status})</option>`
+    `<option value="${c.id}">${escapeHtml(c.title)} (${escapeHtml(Layout.getCampaignStatusInfo(c).label)})</option>`
   ).join("");
 
   // Khi đổi chiến dịch → reload danh sách điểm danh từ DB
   if (!select.dataset.bound) {
     select.dataset.bound = "1";
-    select.addEventListener("change", () => renderLiveAttendanceList());
+    select.addEventListener("change", () => {
+      renderLiveAttendanceList();
+      restoreAttendanceCode();
+    });
   }
 
   if (genBtn && !genBtn.dataset.bound) {
@@ -1295,12 +1255,14 @@ function setupAttendanceGenerator() {
     genBtn.addEventListener("click", generateAttendanceCode);
   }
   renderLiveAttendanceList();
+  restoreAttendanceCode();
 }
 
 function quickOpenAttendance(campaignId) {
   switchOrgTab("attendance");
   const select = document.getElementById("codeGenCampaignSelect");
   if (select) select.value = campaignId;
+  restoreAttendanceCode();
 }
 
 async function generateAttendanceCode() {
@@ -1344,7 +1306,6 @@ async function generateAttendanceCode() {
   camp.attendance_code = generatedCode;
   camp.attendance_code_expires_at = expiresAt;
   camp.attendance_code_type = codeType;
-  DataStore.saveCampaign(camp);
 
   // Hiển thị trên Projector Card & mở Kiosk Modal (Hướng 2)
   // BE lưu datetime theo giờ Việt Nam nhưng response không kèm timezone.
@@ -1352,6 +1313,60 @@ async function generateAttendanceCode() {
     ? expiresAt : `${expiresAt}+07:00`;
   displayLiveCode(generatedCode, new Date(expiryWithTimezone), `${camp.title} — ${codeType}`, codeType);
   openModal("attendanceCodeModal");
+  await restoreAttendanceCode();
+}
+
+async function restoreAttendanceCode() {
+  const campaignId = Number(document.getElementById("codeGenCampaignSelect")?.value);
+  const projector = document.getElementById("projectorCard");
+  if (!projector) return;
+  if (codeCountdownInterval) clearInterval(codeCountdownInterval);
+  projector.style.display = "none";
+  const codeEl = document.getElementById("liveDisplayCode");
+  if (codeEl) codeEl.textContent = "------";
+  let history = document.getElementById("attendanceCodeAuditHistory");
+  if (!history) {
+    history = document.createElement("div");
+    history.id = "attendanceCodeAuditHistory";
+    history.style.cssText = "margin: 12px 0; padding: 12px; border:1px solid #cbd5e1; border-radius:8px";
+    projector.parentElement.appendChild(history);
+  }
+  if (!campaignId) { history.textContent = "Hãy chọn chiến dịch để xem lịch sử mã."; return; }
+  // Prevent a slower response from overwriting a newly selected campaign.
+  const requestId = String(campaignId);
+  history.textContent = "Đang tải mã điểm danh từ máy chủ...";
+  try {
+    const [current, historyResponse] = await Promise.all([
+      api.get(`/attendances/campaigns/${campaignId}/code/current`),
+      api.get(`/attendances/campaigns/${campaignId}/code/history`),
+    ]);
+    if (String(document.getElementById("codeGenCampaignSelect")?.value) !== requestId) return;
+    const code = current.data;
+    const rows = Array.isArray(historyResponse.data) ? historyResponse.data : [];
+    if (code?.code) {
+      const when = String(code.expires_at);
+      const expiry = new Date(/(?:Z|[+-]\d{2}:?\d{2})$/.test(when) ? when : `${when}+07:00`);
+      const title = getOrgCampaigns().find(c => c.id === campaignId)?.title || `Chiến dịch #${campaignId}`;
+      displayLiveCode(code.code, expiry, `${title} — ${code.code_type}`, code.code_type);
+    }
+    history.innerHTML = "";
+    const heading = document.createElement("strong");
+    heading.textContent = `Lịch sử cấp mã (${rows.length} lần gần nhất)`;
+    history.appendChild(heading);
+    if (!rows.length) {
+      const empty = document.createElement("p");
+      empty.textContent = "Chưa từng phát mã điểm danh.";
+      history.appendChild(empty);
+    }
+    for (const item of rows) {
+      const line = document.createElement("p");
+      line.style.cssText = "margin: 8px 0; font-size: 13px; overflow-wrap:anywhere";
+      line.textContent = `#${item.id} | ${item.code_type} | ${item.code} | Cấp: ${item.issued_at} | Hết hạn: ${item.expires_at} | ${item.is_active ? "ĐANG HIỆU LỰC" : item.is_current ? "ĐÃ HẾT HẠN" : "MÃ CŨ"} | Người cấp ID: ${item.issued_by}`;
+      history.appendChild(line);
+    }
+  } catch (error) {
+    history.textContent = Layout.extractApiErrorMessage(error, "Không thể tải mã/lịch sử điểm danh từ Backend.");
+  }
 }
 
 function displayLiveCode(code, expiresDate, campaignTitle, codeType) {
@@ -1400,7 +1415,7 @@ function copyLiveCode() {
   }
 }
 
-async function renderLiveAttendanceList() {
+async function renderLiveAttendanceList(manual = false) {
   const select = document.getElementById("codeGenCampaignSelect");
   const campaignId = parseInt(select?.value) || 0;
   const tbody = document.getElementById("liveAttendanceTbody");
@@ -1412,19 +1427,22 @@ async function renderLiveAttendanceList() {
   }
 
   const refreshBtn = document.querySelector('#tab-attendance .org-icon-btn');
+  const startedAt = Date.now();
   if (!tbody.children.length || tbody.querySelector("td[colspan]")) {
     tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:16px;color:#94a3b8;">Đang tải dữ liệu điểm danh thực từ DB...</td></tr>`;
   } else {
     tbody.classList.add("is-refreshing");
   }
-  if (refreshBtn) refreshBtn.classList.add("is-spinning");
+  setRefreshSpin(refreshBtn, true);
 
   try {
     const res = await api.get(`/attendances/campaigns/${campaignId}`);
+    if (manual) await waitMinSpin(startedAt);
     const attendances = Array.isArray(res.data) ? res.data : [];
 
     if (attendances.length === 0) {
       tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #94a3b8; padding: 20px;">Chưa có TNV nào check-in cho ca này</td></tr>`;
+      if (manual) showToast("Đã cập nhật danh sách điểm danh.", "success");
       return;
     }
 
@@ -1441,6 +1459,12 @@ async function renderLiveAttendanceList() {
         statusHtml = `<span class="status-pill status-rejected"><span class="status-dot"></span> Vắng mặt</span>`;
       }
 
+      const actionsHtml = !a.attendance_id
+        ? `<button type="button" class="btn btn-primary btn-sm" onclick="manualMarkAttendance(${campaignId}, ${Number(a.registration_id)}, 'PRESENT')">Có mặt</button>
+           <button type="button" class="btn btn-outline btn-sm" style="color:#b91c1c;border-color:#fecaca;" onclick="manualMarkAttendance(${campaignId}, ${Number(a.registration_id)}, 'ABSENT')">Vắng</button>`
+        : `<button type="button" class="btn btn-outline btn-sm" onclick="promptEditAttendanceTime(${Number(a.attendance_id)})">Sửa giờ</button>
+           <button type="button" class="btn btn-outline btn-sm" onclick="toggleAttendanceStatus(${Number(a.attendance_id)}, '${a.status === "PRESENT" ? "ABSENT" : "PRESENT"}')">${a.status === "PRESENT" ? "Đánh vắng" : "Đánh có mặt"}</button>`;
+
       return `
         <tr>
           <td class="td-title">${escapeHtml(volName)}</td>
@@ -1453,45 +1477,106 @@ async function renderLiveAttendanceList() {
             <div class="td-subtitle">${mins} phút</div>
           </td>
           <td>${statusHtml}</td>
-          <td style="text-align: right; color: var(--text-muted); font-size: 12.5px;">—</td>
+          <td style="text-align: right; white-space: nowrap;">${actionsHtml}</td>
         </tr>
       `;
     }).join("");
+    if (manual) showToast("Đã cập nhật danh sách điểm danh.", "success");
   } catch (err) {
-    console.warn("Không thể tải điểm danh từ Backend, dùng DataStore:", err);
-    // Fallback về DataStore
-    const attendances = DataStore.get(DataStore.STORAGE_KEYS.ATTENDANCES).filter(a => a.campaign_id === campaignId);
-    const users = DataStore.getUsers();
-
-    if (attendances.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #94a3b8; padding: 20px;">Chưa có TNV nào check-in cho ca này</td></tr>`;
-      return;
-    }
-
-    tbody.innerHTML = attendances.map(a => {
-      const user = users.find(u => u.id === a.user_id) || { full_name: "Tình nguyện viên" };
-      const mins = Number(a.total_minutes || 0);
-      return `
-        <tr>
-          <td class="td-title">${escapeHtml(user.full_name)}</td>
-          <td>
-            <div style="font-size: 13px;">Vào: ${a.check_in_at ? formatDateTime(a.check_in_at) : "—"}</div>
-            <div class="td-subtitle">Ra: ${a.check_out_at ? formatDateTime(a.check_out_at) : "—"}</div>
-          </td>
-          <td>
-            <strong>${(mins / 60).toFixed(1)}h</strong>
-            <div class="td-subtitle">${mins} phút</div>
-          </td>
-          <td><span class="status-pill status-approved"><span class="status-dot"></span> Có mặt</span></td>
-          <td style="text-align: right; color: var(--text-muted); font-size: 12.5px;">—</td>
-        </tr>
-      `;
-    }).join("");
+    const msg = Layout.extractApiErrorMessage(err, "Không thể tải danh sách điểm danh.");
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #ef4444; padding: 20px;">${escapeHtml(msg)}</td></tr>`;
+    if (manual) showToast(msg, "error");
   } finally {
     tbody.classList.remove("is-refreshing");
-    if (refreshBtn) refreshBtn.classList.remove("is-spinning");
+    setRefreshSpin(refreshBtn, false);
   }
 }
+
+async function manualMarkAttendance(campaignId, registrationId, status) {
+  try {
+    await api.post(`/attendances/campaigns/${campaignId}/manual`, {
+      registration_id: registrationId,
+      status,
+    });
+    showToast(`Đã ghi nhận ${status === "PRESENT" ? "Có mặt" : "Vắng mặt"}.`, "success");
+    await renderLiveAttendanceList();
+  } catch (err) {
+    showToast(Layout.extractApiErrorMessage(err, "Không thể điểm danh thủ công."), "error");
+  }
+}
+
+async function toggleAttendanceStatus(attendanceId, nextStatus) {
+  const reason = window.prompt(`Nhập lý do chuyển sang ${nextStatus === "PRESENT" ? "Có mặt" : "Vắng mặt"}:`, "Organizer cập nhật thủ công");
+  if (reason === null) return;
+  if (!reason.trim()) {
+    showToast("Vui lòng nhập lý do.", "warning");
+    return;
+  }
+  try {
+    await api.patch(`/attendances/${attendanceId}/status`, {
+      status: nextStatus,
+      reason: reason.trim(),
+    });
+    showToast("Đã cập nhật trạng thái điểm danh.", "success");
+    await renderLiveAttendanceList();
+  } catch (err) {
+    showToast(Layout.extractApiErrorMessage(err, "Không thể cập nhật trạng thái."), "error");
+  }
+}
+
+async function promptEditAttendanceTime(attendanceId) {
+  const checkInStr = window.prompt("Nhập giờ Check-in (YYYY-MM-DD HH:MM, bỏ trống để giữ nguyên):");
+  if (checkInStr === null) return;
+  const checkOutStr = window.prompt("Nhập giờ Check-out (YYYY-MM-DD HH:MM, bỏ trống để giữ nguyên):");
+  if (checkOutStr === null) return;
+  const reason = window.prompt("Nhập lý do điều chỉnh giờ:", "Organizer bổ sung giờ check-in/check-out");
+  if (reason === null || !reason.trim()) return;
+
+  const payload = { reason: reason.trim() };
+  if (checkInStr.trim()) payload.check_in_at = checkInStr.trim().replace(" ", "T");
+  if (checkOutStr.trim()) payload.check_out_at = checkOutStr.trim().replace(" ", "T");
+  try {
+    await api.patch(`/attendances/${attendanceId}/time`, payload);
+    showToast("Đã cập nhật thời gian điểm danh.", "success");
+    await renderLiveAttendanceList();
+  } catch (err) {
+    showToast(Layout.extractApiErrorMessage(err, "Không thể cập nhật thời gian điểm danh."), "error");
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const fileBtn = document.getElementById("newCampImageFileBtn");
+  const fileInput = document.getElementById("newCampImageFile");
+  const urlInput = document.getElementById("newCampImageUrl");
+  if (fileBtn && fileInput) {
+    fileBtn.addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", async () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+      fileBtn.disabled = true;
+      fileBtn.textContent = "Đang tải...";
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        const res = await api.post("/campaigns/upload-image", formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        const uploadedUrl = res.data?.image_url || "";
+        if (urlInput) urlInput.value = uploadedUrl;
+        if (typeof updateCampaignImagePreview === "function") {
+          updateCampaignImagePreview(uploadedUrl);
+        }
+        showToast("Đã tải ảnh chiến dịch lên thành công!", "success");
+      } catch (err) {
+        showToast(Layout.extractApiErrorMessage(err, "Tải ảnh chiến dịch thất bại."), "error");
+      } finally {
+        fileBtn.disabled = false;
+        fileBtn.textContent = "Chọn ảnh";
+        fileInput.value = "";
+      }
+    });
+  }
+});
 
 // ================= TAB 4: DUYỆT ĐƠN ĐĂNG KÝ TNV =================
 function populateVolunteerCampaignFilter() {
@@ -1565,26 +1650,27 @@ function onVolunteerCampaignChange() {
   }
 }
 
-function refreshVolunteerSection() {
+function refreshVolunteerSection(manual = false) {
   if (volunteerViewMode === "waitlist") {
-    loadCampaignWaitlist();
+    loadCampaignWaitlist(manual);
   } else {
-    renderVolunteerApplicants(true);
+    renderVolunteerApplicants(true, manual);
   }
 }
 
-async function renderVolunteerApplicants(forceRefresh = false) {
+async function renderVolunteerApplicants(forceRefresh = false, manual = false) {
   const tbody = document.getElementById("orgApplicantsTbody");
   if (!tbody) return;
 
   populateVolunteerCampaignFilter();
   const refreshBtn = document.querySelector("#volRegistrationsWrap .org-icon-btn");
+  const startedAt = Date.now();
   if (!tbody.children.length || tbody.querySelector("td[colspan]")) {
     tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:24px;color:#94a3b8;">Đang tải danh sách đơn đăng ký từ cơ sở dữ liệu...</td></tr>`;
   } else {
     tbody.classList.add("is-refreshing");
   }
-  if (refreshBtn) refreshBtn.classList.add("is-spinning");
+  setRefreshSpin(refreshBtn, true);
 
   let allRegs = [];
   const allCampaigns = getOrgCampaigns();
@@ -1605,12 +1691,15 @@ async function renderVolunteerApplicants(forceRefresh = false) {
         };
       });
     }
+    if (manual) {
+      await waitMinSpin(startedAt);
+      showToast("Đã cập nhật danh sách đơn đăng ký.", "success");
+    }
   } catch (err) {
-    console.warn("Không thể tải đơn đăng ký từ Backend:", err);
-    allRegs = DataStore.getRegistrations().filter((r) => orgCampaignIds.includes(r.campaign_id));
+    showToast(Layout.extractApiErrorMessage(err, "Không thể tải danh sách đơn đăng ký."), "error");
   } finally {
     tbody.classList.remove("is-refreshing");
-    if (refreshBtn) refreshBtn.classList.remove("is-spinning");
+    setRefreshSpin(refreshBtn, false);
   }
 
   const regularRegs = allRegs.filter((r) => r.status !== "WAITLISTED");
@@ -1792,13 +1881,8 @@ async function approveVolunteerRegistration(regId, campaignId) {
     await api.patch(`/registrations/${regId}/approve?campaign_id=${campaignId}`);
     showToast("Đã duyệt tình nguyện viên tham gia chiến dịch!", "success");
   } catch (err) {
-    if (!err.response) {
-      DataStore.updateRegistrationStatus(regId, "APPROVED");
-      showToast("Đã duyệt (lưu cục bộ).", "success");
-    } else {
-      showToast(Layout.extractApiErrorMessage(err, "Không thể duyệt đơn đăng ký."), "error");
-      return;
-    }
+    showToast(Layout.extractApiErrorMessage(err, "Không thể duyệt đơn đăng ký."), "error");
+    return;
   }
   closeModal("registrationDetailModal");
   await loadOrganizerCampaigns();
@@ -1842,12 +1926,8 @@ async function confirmRejectVolunteerRegistration() {
     )
   );
   const okCount = results.filter((res) => res.status === "fulfilled").length;
-  const networkOnly = results.every((res) => res.status === "rejected" && !res.reason?.response);
 
-  if (okCount === 0 && networkOnly) {
-    targets.forEach(({ id: regId }) => DataStore.updateRegistrationStatus(regId, "REJECTED", reason));
-    showToast(`Đã từ chối ${targets.length} đơn (lưu cục bộ).`, "warning");
-  } else if (okCount === 0) {
+  if (okCount === 0) {
     const firstErr = results.find((res) => res.status === "rejected")?.reason;
     showToast(Layout.extractApiErrorMessage(firstErr, "Không thể từ chối đơn đăng ký."), "error");
     return;
@@ -1934,7 +2014,10 @@ function formatWaitlistStatusPill(status) {
 function formatWaitlistDeadlineCell(entry) {
   const status = String(entry.status || "").toUpperCase();
   if (status === "INVITED" && entry.response_deadline) {
-    const deadlineMs = new Date(entry.response_deadline).getTime();
+    const parsedDeadline = typeof parseApiDate === "function"
+      ? parseApiDate(entry.response_deadline)
+      : new Date(entry.response_deadline);
+    const deadlineMs = parsedDeadline ? parsedDeadline.getTime() : NaN;
     const diffMs = deadlineMs - Date.now();
     let countdownText = "Đã quá hạn";
     if (!Number.isNaN(diffMs) && diffMs > 0) {
@@ -1976,7 +2059,7 @@ function updateWaitlistSummaryCounts(entries) {
   if (elDone) elDone.textContent = String(done);
 }
 
-async function loadCampaignWaitlist() {
+async function loadCampaignWaitlist(manual = false) {
   const tbody = document.getElementById("orgWaitlistTbody");
   if (!tbody) return;
   if (!orgCampaignsLoaded) {
@@ -1996,12 +2079,13 @@ async function loadCampaignWaitlist() {
   }
 
   const refreshBtn = document.querySelector("#volWaitlistWrap .org-icon-btn");
+  const startedAt = Date.now();
   if (!tbody.children.length || tbody.querySelector("td[colspan]")) {
     tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #94a3b8; padding: 28px;">Đang tải danh sách chờ...</td></tr>`;
   } else {
     tbody.classList.add("is-refreshing");
   }
-  if (refreshBtn) refreshBtn.classList.add("is-spinning");
+  setRefreshSpin(refreshBtn, true);
 
   try {
     const results = await Promise.all(
@@ -2011,6 +2095,7 @@ async function loadCampaignWaitlist() {
           .catch((error) => { throw error; })
       )
     );
+    if (manual) await waitMinSpin(startedAt);
     const entries = results.flat();
     updateWaitlistSummaryCounts(entries);
 
@@ -2028,6 +2113,7 @@ async function loadCampaignWaitlist() {
         ? "Chưa có tình nguyện viên nào trong danh sách chờ."
         : "Không tìm thấy tình nguyện viên phù hợp với từ khóa.";
       tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #94a3b8; padding: 32px;">${emptyMsg}</td></tr>`;
+      if (manual) showToast("Đã cập nhật danh sách chờ.", "success");
       return;
     }
     tbody.innerHTML = filtered.map((e, idx) => {
@@ -2048,12 +2134,14 @@ async function loadCampaignWaitlist() {
         </tr>
       `;
     }).join("");
+    if (manual) showToast("Đã cập nhật danh sách chờ.", "success");
   } catch (err) {
     const msg = Layout.extractApiErrorMessage(err, "Không thể tải danh sách chờ.");
     tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #b91c1c; padding: 32px;">${escapeHtml(msg)}</td></tr>`;
+    if (manual) showToast(msg, "error");
   } finally {
     tbody.classList.remove("is-refreshing");
-    if (refreshBtn) refreshBtn.classList.remove("is-spinning");
+    setRefreshSpin(refreshBtn, false);
   }
 }
 
@@ -2094,15 +2182,15 @@ async function renderCertificatesAndClaims() {
             </td>
             <td><strong>${escapeHtml(String(displayHours))} giờ</strong><div class="td-subtitle">Điểm danh: ${actualHours}h · Đề nghị: ${escapeHtml(String(hoursVal))}h</div></td>
             <td>
-              ${cl.evidence_url ? `<a href="${escapeHtml(cl.evidence_url)}" target="_blank" rel="noopener noreferrer" style="color: var(--primary); font-size: 12px; font-weight: 600;">Xem minh chứng ↗</a>` : "—"}
+              ${isSafeHttpUrl(cl.evidence_url) ? `<a href="${escapeHtml(cl.evidence_url)}" target="_blank" rel="noopener noreferrer" style="color: var(--primary); font-size: 12px; font-weight: 600;">Xem minh chứng ↗</a>` : (cl.evidence_url ? `<span style="color: var(--text-muted); font-size: 12px;">URL không hợp lệ</span>` : "—")}
             </td>
             <td style="text-align: right;">
               ${cl.status === "PENDING" ? `
                 <div class="btn-group-sm" style="justify-content: flex-end;">
-                  <button type="button" class="btn-action btn-action-primary" onclick="verifyHourClaim(${cl.id}, ${Math.min(Number(hoursVal), actualHours)})">Xác nhận</button>
+                  <button type="button" class="btn-action btn-action-primary" ${actualHours <= 0 ? 'disabled title="TNV chưa có giờ điểm danh hợp lệ"' : ""} onclick="verifyHourClaim(${cl.id}, ${Math.min(Number(hoursVal), actualHours)})">Xác nhận</button>
                   <button type="button" class="btn-action btn-action-danger" onclick="rejectHourClaim(${cl.id})">Từ chối</button>
                 </div>
-              ` : `<span class="status-pill status-${String(cl.status).toLowerCase()}">${escapeHtml(cl.status)}</span>`}
+              ` : `<span class="status-pill status-${String(cl.status).toLowerCase()}">${escapeHtml(cl.status === "VERIFIED" ? "Đã xác nhận" : cl.status === "REJECTED" ? "Bị từ chối" : cl.status === "PENDING" ? "Đang đợi" : cl.status)}</span>`}
             </td>
           </tr>
         `;
@@ -2309,12 +2397,12 @@ async function submitIssueCertificate() {
 
 // ================= TAB 6: HỒ SƠ TỔ CHỨC =================
 function setupOrgProfileForm() {
-  document.getElementById("orgFormName").value = currentOrg.name || "";
-  document.getElementById("orgFormEmail").value = currentOrg.email || "";
-  document.getElementById("orgFormPhone").value = currentOrg.phone || "";
-  document.getElementById("orgFormAddress").value = currentOrg.address || "";
-  document.getElementById("orgFormDocUrl").value = currentOrg.document_url || "";
-  document.getElementById("orgFormDesc").value = currentOrg.description || "";
+  document.getElementById("orgFormName").value = currentOrg?.name || "";
+  document.getElementById("orgFormEmail").value = currentOrg?.email || "";
+  document.getElementById("orgFormPhone").value = currentOrg?.phone || "";
+  document.getElementById("orgFormAddress").value = currentOrg?.address || "";
+  document.getElementById("orgFormDocUrl").value = currentOrg?.document_url || "";
+  document.getElementById("orgFormDesc").value = currentOrg?.description || "";
 
   const avatarEl = document.getElementById("orgAccountAvatarBig");
   if (avatarEl && !avatarEl.dataset.previewBound) {
@@ -2366,6 +2454,10 @@ async function saveOrgProfile() {
     showToast("Vui lòng nhập đầy đủ Tên, Email và Số điện thoại tổ chức.", "error");
     return;
   }
+  if (!/^0\d{9,10}$/.test(phone)) {
+    showToast("Số điện thoại tổ chức phải gồm 10–11 chữ số và bắt đầu bằng số 0.", "warning");
+    return;
+  }
 
   const payload = {
     name,
@@ -2386,79 +2478,134 @@ async function saveOrgProfile() {
     return;
   }
 
-  const orgs = DataStore.getOrganizations();
-  const index = orgs.findIndex(o => o.id === currentOrg.id);
-  if (index !== -1) {
-    orgs[index] = { ...currentOrg, updated_at: new Date().toISOString() };
-    DataStore.set(DataStore.STORAGE_KEYS.ORGS, orgs);
-  }
-
   renderOrgStatusBanner();
   setupOrganizerHeader();
   showToast("Đã lưu thông tin hồ sơ tổ chức!", "success");
 }
 
-// Modal helpers
-function openModal(modalId) {
-  const modal = document.getElementById(modalId);
-  if (modal) modal.classList.add("open");
-}
-
-function closeModal(modalId) {
-  const modal = document.getElementById(modalId);
-  if (modal) modal.classList.remove("open");
-  if (modalId === "createCampaignModal") {
+// Modal helpers (kế thừa VLModal từ js/utils.js, giữ hook reset cho createCampaignModal)
+if (typeof VLModal !== "undefined") {
+  VLModal.onClose("createCampaignModal", () => {
     activeDetailCampaignId = null;
     campaignInitialSnapshot = null;
     isCampaignEditing = false;
     toggleCancelCampaignBox(false);
-  }
+  });
 }
 
 
 /* Khiếu nại điểm danh: API thật, không fallback dữ liệu mẫu. */
-async function loadOrganizerAttendanceAppeals() {
+async function loadOrganizerAttendanceAppeals(manual = false) {
   const panel = document.getElementById("organizerAttendanceAppeals");
   if (!panel) return;
-  panel.textContent = "Đang tải khiếu nại điểm danh...";
+  const refreshBtn = document.getElementById("refreshAttendanceAppeals");
+  const startedAt = Date.now();
+  setRefreshSpin(refreshBtn, true);
+  if (!manual || !panel.querySelector(".vl-appeal-list")) {
+    panel.textContent = "Đang tải khiếu nại điểm danh...";
+  }
+  const statusMap = {
+    PENDING: { label: "Chờ xử lý", cls: "status-pending" },
+    ACCEPTED: { label: "Đã chấp nhận", cls: "status-approved" },
+    REJECTED: { label: "Đã từ chối", cls: "status-rejected" },
+  };
   try {
     const res = await api.get("/attendance-appeals/organizer");
+    if (manual) await waitMinSpin(startedAt);
     const appeals = Array.isArray(res.data) ? res.data : [];
-    panel.innerHTML = appeals.length ? appeals.map(a => `
-      <div style="border-bottom:1px solid #ddd;padding:12px 0;">
-        <div><strong>Đơn #${Number(a.registration_id)}</strong> — ${escapeHtml(a.status)}</div>
-        <div>${escapeHtml(a.reason)}</div>
-        ${a.evidence_url ? `<div>Bằng chứng: ${escapeHtml(a.evidence_url)}</div>` : ""}
-        ${a.review_note ? `<div>Phản hồi: ${escapeHtml(a.review_note)}</div>` : ""}
-        ${a.status === "PENDING" ? `<div class="ud-btn-row">
-          <button type="button" class="btn btn-primary btn-sm" onclick="reviewAttendanceAppeal(${Number(a.id)}, 'ACCEPTED')">Chấp nhận</button>
-          <button type="button" class="btn btn-outline btn-sm" onclick="reviewAttendanceAppeal(${Number(a.id)}, 'REJECTED')">Từ chối</button>
-        </div>` : ""}
-      </div>`).join("") : "Không có khiếu nại điểm danh.";
-  } catch (err) { panel.textContent = Layout.extractApiErrorMessage(err, "Không thể tải khiếu nại điểm danh."); }
+    if (!appeals.length) {
+      panel.innerHTML = `<div class="vl-appeal-meta">Không có khiếu nại điểm danh nào.</div>`;
+      if (manual) showToast("Đã cập nhật khiếu nại điểm danh.", "success");
+      return;
+    }
+    panel.innerHTML = `<div class="vl-appeal-list">${appeals.map((a) => {
+      const st = statusMap[a.status] || { label: a.status, cls: "status-closed" };
+      const safeUrl = /^https?:\/\//i.test(String(a.evidence_url || "").trim()) ? a.evidence_url.trim() : "";
+      return `
+        <div class="vl-appeal-item">
+          <div class="vl-appeal-head">
+            <strong>Đơn #${Number(a.registration_id)}</strong>
+            <span class="status-pill ${st.cls}">${escapeHtml(st.label)}</span>
+          </div>
+          <div class="vl-appeal-reason">${escapeHtml(a.reason)}</div>
+          ${safeUrl ? `<div class="vl-appeal-meta">Bằng chứng: <a href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(safeUrl)}</a></div>` : ""}
+          ${a.review_note ? `<div class="vl-appeal-meta">Phản hồi: ${escapeHtml(a.review_note)}</div>` : ""}
+          ${a.status === "PENDING" ? `
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px;">
+              <button type="button" class="btn btn-primary btn-sm" onclick="reviewAttendanceAppeal(${Number(a.id)}, 'ACCEPTED')">Chấp nhận</button>
+              <button type="button" class="btn btn-outline btn-sm" onclick="reviewAttendanceAppeal(${Number(a.id)}, 'REJECTED')">Từ chối</button>
+            </div>` : ""}
+        </div>`;
+    }).join("")}</div>`;
+    if (manual) showToast("Đã cập nhật khiếu nại điểm danh.", "success");
+  } catch (err) {
+    const msg = Layout.extractApiErrorMessage(err, "Không thể tải khiếu nại điểm danh.");
+    panel.textContent = msg;
+    if (manual) showToast(msg, "error");
+  } finally {
+    setRefreshSpin(refreshBtn, false);
+  }
 }
 
-async function reviewAttendanceAppeal(id, decision) {
-  const reviewNote = prompt("Ghi rõ lý do xử lý khiếu nại:");
-  if (!reviewNote || reviewNote.trim().length < 3) return;
-  const body = {decision, review_note: reviewNote.trim()};
-  if (decision === "ACCEPTED") {
-    const input = prompt("Giờ CHECK-IN xác nhận (YYYY-MM-DDTHH:MM), để trống nếu đã có trong hệ thống:");
-    if (input === null) return;
-    const output = prompt("Giờ CHECK-OUT xác nhận (YYYY-MM-DDTHH:MM), để trống nếu đã có trong hệ thống:");
-    if (output === null) return;
-    if (input.trim()) body.check_in_at = input.trim();
-    if (output.trim()) body.check_out_at = output.trim();
+function reviewAttendanceAppeal(id, decision) {
+  const idInput = document.getElementById("reviewAppealId");
+  const decisionInput = document.getElementById("reviewAppealDecision");
+  const noteInput = document.getElementById("reviewAppealNoteInput");
+  const inInput = document.getElementById("reviewAppealCheckInInput");
+  const outInput = document.getElementById("reviewAppealCheckOutInput");
+  const timeWrap = document.getElementById("reviewAppealTimeFields");
+  const titleEl = document.getElementById("reviewAttendanceAppealTitle");
+  const confirmBtn = document.getElementById("confirmReviewAppealBtn");
+
+  if (idInput) idInput.value = String(id);
+  if (decisionInput) decisionInput.value = decision;
+  if (noteInput) noteInput.value = "";
+  if (inInput) inInput.value = "";
+  if (outInput) outInput.value = "";
+  if (timeWrap) timeWrap.hidden = decision !== "ACCEPTED";
+  if (titleEl) titleEl.textContent = decision === "ACCEPTED" ? "Chấp nhận khiếu nại điểm danh" : "Từ chối khiếu nại điểm danh";
+  if (confirmBtn) {
+    confirmBtn.textContent = decision === "ACCEPTED" ? "Xác nhận chấp nhận" : "Xác nhận từ chối";
+    confirmBtn.className = decision === "ACCEPTED" ? "btn btn-primary" : "btn btn-danger";
+    confirmBtn.disabled = false;
   }
+  openModal("reviewAttendanceAppealModal");
+}
+
+async function submitReviewAttendanceAppeal() {
+  const id = Number(document.getElementById("reviewAppealId")?.value);
+  const decision = document.getElementById("reviewAppealDecision")?.value;
+  const reviewNote = (document.getElementById("reviewAppealNoteInput")?.value || "").trim();
+  const checkInVal = (document.getElementById("reviewAppealCheckInInput")?.value || "").trim();
+  const checkOutVal = (document.getElementById("reviewAppealCheckOutInput")?.value || "").trim();
+  const confirmBtn = document.getElementById("confirmReviewAppealBtn");
+
+  if (!id || reviewNote.length < 3) {
+    showToast("Vui lòng nhập ghi chú xử lý (tối thiểu 3 ký tự).", "warning");
+    document.getElementById("reviewAppealNoteInput")?.focus();
+    return;
+  }
+
+  const body = { decision, review_note: reviewNote };
+  if (decision === "ACCEPTED") {
+    if (checkInVal) body.check_in_at = checkInVal;
+    if (checkOutVal) body.check_out_at = checkOutVal;
+  }
+
+  if (confirmBtn) confirmBtn.disabled = true;
   try {
     await api.patch(`/attendance-appeals/${id}/review`, body);
+    closeModal("reviewAttendanceAppealModal");
     showToast("Đã xử lý khiếu nại điểm danh.", "success");
     await loadOrganizerAttendanceAppeals();
     if (typeof renderLiveAttendanceList === "function") await renderLiveAttendanceList();
-  } catch (err) { showToast(Layout.extractApiErrorMessage(err, "Không xử lý được khiếu nại."), "error"); }
+  } catch (err) {
+    showToast(Layout.extractApiErrorMessage(err, "Không xử lý được khiếu nại."), "error");
+    if (confirmBtn) confirmBtn.disabled = false;
+  }
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  document.getElementById("refreshAttendanceAppeals")?.addEventListener("click", loadOrganizerAttendanceAppeals);
+  document.getElementById("refreshAttendanceAppeals")?.addEventListener("click", () => loadOrganizerAttendanceAppeals(true));
   loadOrganizerAttendanceAppeals();
 });

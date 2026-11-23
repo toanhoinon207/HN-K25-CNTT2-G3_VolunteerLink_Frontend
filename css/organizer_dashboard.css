@@ -80,8 +80,7 @@
 
 .org-active-banner {
   background: var(--surface);
-  border: 1px solid var(--ud-hairline);
-  border-inline-start: 4px solid var(--primary);
+  border: 1px solid var(--primary-border);
   border-radius: 14px;
   padding: 18px 20px;
   box-shadow: var(--shadow-xs);
@@ -109,62 +108,10 @@
   gap: 10px;
 }
 
-.status-dot {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: currentColor;
-  margin-inline-end: 6px;
-}
-
-.btn-action-danger {
-  color: var(--danger);
-  border-color: var(--danger-border);
-}
-
-.btn-action-danger:hover {
-  background: var(--danger-bg);
-  border-color: var(--danger);
-}
-
-.btn-action-blue {
-  background: var(--info-bg);
-  border-color: var(--info-border);
-  color: #1D4ED8;
-}
-
-.btn-action-blue:hover {
-  background: #DBEAFE;
-  border-color: var(--info);
-}
-
-.btn-group-sm {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: nowrap;
-}
-
 .td-subtitle {
   font-size: 0.78rem;
   color: var(--text-muted);
   margin-block-start: 2px;
-}
-
-.status-draft {
-  background: var(--surface-alt);
-  color: var(--text-muted);
-}
-
-.status-completed {
-  background: var(--info-bg);
-  color: #1D4ED8;
-}
-
-.status-cancelled {
-  background: var(--danger-bg);
-  color: var(--danger);
 }
 
 /* ---------- Topbar single-line safeguard ---------- */
@@ -1103,12 +1050,6 @@
   overflow-wrap: anywhere;
 }
 
-tbody.is-refreshing {
-  opacity: 0.5;
-  pointer-events: none;
-  transition: opacity 0.15s ease;
-}
-
 /* ---------- Organizer Campaign Grid Override (kế thừa components.css) ---------- */
 #orgCampaignsGrid.campaign-list-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1128,17 +1069,6 @@ tbody.is-refreshing {
 }
 
 /* ---------- Organizer Volunteer Approval & Campaign CRUD Helpers ---------- */
-.btn-action-danger {
-  color: #B91C1C;
-  border-color: #FECACA;
-  background: #FEF2F2;
-}
-
-.btn-action-danger:hover {
-  background: #FEE2E2;
-  border-color: #FCA5A5;
-}
-
 .org-mode-switch {
   display: inline-flex;
   background: var(--surface-alt);
@@ -1149,21 +1079,28 @@ tbody.is-refreshing {
 }
 
 .org-mode-btn {
-  border: 0;
-  background: transparent;
-  padding: 7px 14px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  padding: 8px 16px;
   border-radius: 8px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text-muted);
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--text-main);
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.org-mode-btn:hover:not(.active) {
+  background: var(--primary-light, #ecfdf5);
+  border-color: var(--primary-border, #a7f3d0);
+  color: var(--primary-dark, #166534);
 }
 
 .org-mode-btn.active {
-  background: var(--surface);
-  color: var(--primary-dark);
-  box-shadow: var(--shadow-xs);
+  background: var(--primary, #1b7a4b);
+  border-color: var(--primary, #1b7a4b);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(27, 122, 75, 0.25);
 }
 
 .org-stat-chips {

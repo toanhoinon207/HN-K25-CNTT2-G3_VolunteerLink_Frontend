@@ -15,6 +15,20 @@ let allCampaigns = [];
 let allUsers = [];
 let allCertificates = [];
 
+function renderAdminPaginatedRows(tbody, items, _pageKey, colspan, emptyText, mapRow) {
+  if (!tbody) return;
+  const tableWrapper = tbody.closest(".table-wrapper");
+  const pager = tableWrapper?.parentElement?.querySelector(".vl-table-pagination");
+  if (pager) pager.remove();
+
+  if (!items.length) {
+    tbody.innerHTML = `<tr><td colspan="${colspan}" style="text-align:center;color:var(--text-muted);padding:24px;">${escapeHtml(emptyText)}</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = items.map(mapRow).join("");
+}
+
 const ORG_STATUS_MAP = {
   PENDING: { label: "Chờ duyệt", cls: "status-pending" },
   APPROVED: { label: "Đã duyệt", cls: "status-approved" },
@@ -30,24 +44,9 @@ const CAMP_STATUS_MAP = {
   CANCELLED: { label: "Đã hủy", cls: "status-closed" },
 };
 
-function extractApiError(error, fallback = "Đã xảy ra lỗi khi kết nối máy chủ.") {
-  const detail = error?.response?.data?.detail;
-  if (typeof detail === "string" && detail.trim()) return detail;
-  if (Array.isArray(detail) && detail.length > 0) {
-    return detail.map((item) => item.msg || "Dữ liệu không hợp lệ").join("; ");
-  }
-  if (!error?.response) return "Không thể kết nối tới Backend.";
-  return fallback;
-}
-
 function formatDateVN(value) {
-  if (!value) return "--";
-  const d = new Date(value);
-  return isNaN(d.getTime()) ? "--" : d.toLocaleDateString("vi-VN");
-}
-
-function isSafeHttpUrl(url) {
-  return /^https?:\/\//i.test(String(url || "").trim());
+  const d = typeof parseApiDate === "function" ? parseApiDate(value) : new Date(value);
+  return !d || isNaN(d.getTime()) ? "--" : d.toLocaleDateString("vi-VN");
 }
 
 /* ==================== KHỞI TẠO ==================== */
@@ -66,27 +65,39 @@ document.addEventListener("DOMContentLoaded", async () => {
   const logoutBtn = document.getElementById("logoutBtn");
   if (logoutBtn) {
     logoutBtn.addEventListener("click", async () => {
-      try {
-        await api.post("/auth/logout");
-      } catch {
-        // Vẫn xóa session cục bộ nếu token đã hết hạn
-      }
-      Auth.logout();
+      if (await Auth.confirmLogout()) Auth.logout();
     });
   }
 
   await refreshAllAdminData();
 });
 
-async function refreshAllAdminData() {
-  await Promise.allSettled([
-    checkBackendHealth(false),
-    loadAdminOrganizations(),
-    loadAdminCampaigns(),
-    loadAdminUsers(),
-    loadAdminCertificates(),
-  ]);
-  renderOverviewStats();
+async function refreshAllAdminData(manual = false) {
+  const refreshBtn = document.getElementById("refreshAdminOverviewBtn");
+  const startedAt = Date.now();
+  if (manual) setRefreshSpin(refreshBtn, true);
+  try {
+    const results = await Promise.allSettled([
+      checkBackendHealth(false),
+      loadAdminOrganizations(),
+      loadAdminCampaigns(),
+      loadAdminUsers(),
+      loadAdminCertificates(),
+      loadAdminAppeals(),
+    ]);
+    renderOverviewStats();
+    if (manual) {
+      await waitMinSpin(startedAt);
+      const hasFailure = results.some((r) => r.status === "rejected");
+      if (hasFailure) {
+        showToast("Một số dữ liệu quản trị chưa thể làm mới.", "warning");
+      } else {
+        showToast("Đã cập nhật dữ liệu hệ thống.", "success");
+      }
+    }
+  } finally {
+    if (manual) setRefreshSpin(refreshBtn, false);
+  }
 }
 
 function setupAdminHeader() {
@@ -119,7 +130,9 @@ function setupTabs() {
     });
   });
 
-  const initialTab = new URLSearchParams(window.location.search).get("tab");
+  const rawTab = new URLSearchParams(window.location.search).get("tab");
+  const tabAlias = { "hour-appeals": "appeals", "attendance-appeals": "appeals" };
+  const initialTab = tabAlias[rawTab] || rawTab;
   if (initialTab && document.getElementById("tab-" + initialTab)) {
     switchAdminTab(initialTab);
   }
@@ -297,13 +310,7 @@ function filterAdminOrgs() {
     return matchStatus && matchText;
   });
 
-  if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px;">Không có tổ chức nào phù hợp.</td></tr>`;
-    return;
-  }
-
-  tbody.innerHTML = filtered
-    .map((org) => {
+  renderAdminPaginatedRows(tbody, filtered, "orgs", 6, "Không có tổ chức nào phù hợp.", (org) => {
       const st = ORG_STATUS_MAP[org.status] || { label: org.status, cls: "status-closed" };
       const docCell = isSafeHttpUrl(org.document_url)
         ? `<a href="${escapeHtml(org.document_url)}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm">Mở tài liệu</a>`
@@ -338,8 +345,7 @@ function filterAdminOrgs() {
           <td>${reviewCell}</td>
         </tr>
       `;
-    })
-    .join("");
+    });
 }
 
 function openOrgDetailModal(orgId) {
@@ -519,14 +525,13 @@ function filterAdminCamps() {
     return matchStatus && matchText;
   });
 
-  if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px;">Không có chiến dịch nào phù hợp.</td></tr>`;
-    return;
-  }
-
-  tbody.innerHTML = filtered
-    .map((c) => {
-      const st = CAMP_STATUS_MAP[c.status] || { label: c.status, cls: "status-closed" };
+  renderAdminPaginatedRows(tbody, filtered, "camps", 6, "Không có chiến dịch nào phù hợp.", (c) => {
+      const displayStatus = Layout.getCampaignDisplayStatus(c);
+      const st = ({
+        IN_PROGRESS: {label: "Đang diễn ra", cls: "status-approved"},
+        REGISTRATION_CLOSED: {label: "Đã đóng đăng ký", cls: "status-closed"},
+        REGISTRATION_OPEN: {label: "Đang mở đăng ký", cls: "status-approved"},
+      })[displayStatus] || CAMP_STATUS_MAP[displayStatus] || {label: displayStatus, cls: "status-closed"};
       const orgName = c.organization?.name || c.organization_name || `Tổ chức #${c.organization_id}`;
       const reviewCell =
         c.status === "PENDING"
@@ -536,13 +541,16 @@ function filterAdminCamps() {
             </div>`
           : `<span style="color:var(--text-muted);font-size:0.82rem;">Đã xử lý</span>`;
 
+      const startVal = c.start_time || c.start_date;
+      const endVal = c.end_time || c.end_date;
+      const maxPartVal = c.max_participants ?? c.max_volunteers;
       const dateRange =
-        c.start_date || c.end_date
-          ? `<div>${formatDateVN(c.start_date)} - ${formatDateVN(c.end_date)}</div>`
+        startVal || endVal
+          ? `<div>${formatDateVN(startVal)} - ${formatDateVN(endVal)}</div>`
           : `<div>${escapeHtml(c.category || "Chiến dịch cộng đồng")}</div>`;
       const quotaLine =
-        c.max_volunteers != null
-          ? `<div style="font-size:0.8rem;color:var(--text-muted);">Chỉ tiêu: ${Number(c.max_volunteers)} TNV</div>`
+        maxPartVal != null
+          ? `<div style="font-size:0.8rem;color:var(--text-muted);">Chỉ tiêu: ${Number(maxPartVal)} TNV</div>`
           : `<div style="font-size:0.8rem;color:var(--text-muted);">Xem chi tiết để biết lịch</div>`;
 
       return `
@@ -563,8 +571,7 @@ function filterAdminCamps() {
           <td>${reviewCell}</td>
         </tr>
       `;
-    })
-    .join("");
+    });
 }
 
 async function approveCampaign(campId) {
@@ -634,13 +641,7 @@ function filterAdminUsers() {
     return matchRole && matchStatus && matchText;
   });
 
-  if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:24px;">Không có tài khoản nào phù hợp.</td></tr>`;
-    return;
-  }
-
-  tbody.innerHTML = filtered
-    .map((u) => {
+  renderAdminPaginatedRows(tbody, filtered, "users", 5, "Không có tài khoản nào phù hợp.", (u) => {
       const isSelf = u.id === currentUser.id;
       const isActive = u.status === "ACTIVE";
       const nextStatus = isActive ? "LOCKED" : "ACTIVE";
@@ -669,8 +670,7 @@ function filterAdminUsers() {
           </td>
         </tr>
       `;
-    })
-    .join("");
+    });
 }
 
 async function toggleUserStatus(userId, newStatus) {
@@ -737,13 +737,7 @@ function filterAdminCerts() {
     return matchStatus && matchText;
   });
 
-  if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px;">Không có chứng chỉ nào phù hợp.</td></tr>`;
-    return;
-  }
-
-  tbody.innerHTML = filtered
-    .map((cert) => {
+  renderAdminPaginatedRows(tbody, filtered, "certs", 6, "Không có chứng chỉ nào phù hợp.", (cert) => {
       const isActive = cert.status === "ACTIVE";
       return `
         <tr>
@@ -755,7 +749,7 @@ function filterAdminCerts() {
           <td>${escapeHtml(cert.campaign_title || `Campaign #${cert.campaign_id}`)}</td>
           <td>${Number(cert.total_hours || 0).toFixed(1)} giờ</td>
           <td>
-            <span class="status-pill ${isActive ? "status-approved" : "status-rejected"}">${escapeHtml(cert.status)}</span>
+            <span class="status-pill ${isActive ? "status-approved" : "status-rejected"}">${isActive ? "Hợp lệ" : "Đã thu hồi"}</span>
             ${!isActive && cert.revoked_reason ? `<div style="font-size:0.78rem;color:var(--danger);margin-top:4px;">${escapeHtml(cert.revoked_reason)}</div>` : ""}
           </td>
           <td>
@@ -767,8 +761,7 @@ function filterAdminCerts() {
           </td>
         </tr>
       `;
-    })
-    .join("");
+    });
 }
 
 function openRevokeCertModal(certId) {
@@ -817,12 +810,135 @@ function exportSystemReport() {
   showToast("Đã xuất báo cáo CSV.", "success");
 }
 
-function openModal(modalId) {
-  const modal = document.getElementById(modalId);
-  if (modal) modal.classList.add("open");
+/* ==================== TAB 5.5: KHIẾU NẠI HỆ THỐNG ==================== */
+
+async function loadAdminAppeals() {
+  const hourTbody = document.getElementById("adminHourAppealsTbody");
+  const attTbody = document.getElementById("adminAttendanceAppealsTbody");
+  const badge = document.getElementById("pendingAppealsBadge");
+
+  try {
+    const [hourRes, attRes] = await Promise.all([
+      api.get("/hour-claims"),
+      api.get("/attendance-appeals/admin"),
+    ]);
+
+    const hourClaims = (Array.isArray(hourRes.data) ? hourRes.data : []).filter((c) => Boolean(c.appeal_status));
+    const attAppeals = Array.isArray(attRes.data) ? attRes.data : [];
+
+    const pendingCount =
+      hourClaims.filter((c) => c.appeal_status === "PENDING").length +
+      attAppeals.filter((a) => a.status === "ADMIN_PENDING").length;
+    if (badge) badge.textContent = String(pendingCount);
+
+    if (hourTbody) {
+      if (!hourClaims.length) {
+        hourTbody.innerHTML = `<tr><td colspan="5" class="ud-empty">Chưa có khiếu nại giờ nào.</td></tr>`;
+      } else {
+        hourTbody.innerHTML = hourClaims.map((c) => {
+          const isPending = c.appeal_status === "PENDING";
+          const pillCls = isPending ? "status-pending" : c.appeal_status === "ACCEPTED" ? "status-approved" : "status-rejected";
+          const actions = isPending
+            ? `<button type="button" class="btn btn-primary btn-sm" onclick="adminReviewHourAppeal(${Number(c.id)}, 'ACCEPTED', ${Number(c.claimed_hours || 0)})">Chấp nhận</button>
+               <button type="button" class="btn btn-outline btn-sm" style="color:#b91c1c;border-color:#fecaca;" onclick="adminReviewHourAppeal(${Number(c.id)}, 'REJECTED', 0)">Từ chối</button>`
+            : `<span style="color:var(--text-muted);">${escapeHtml(c.admin_note || "Đã xử lý")}</span>`;
+          return `
+            <tr>
+              <td><div class="td-title">${escapeHtml(c.user_name || `User #${c.user_id}`)}</div><div class="td-subtitle">${escapeHtml(c.campaign_title || `Đơn #${c.registration_id}`)}</div></td>
+              <td><strong>${Number(c.claimed_hours || 0)}h</strong><div class="td-subtitle">Đã duyệt: ${c.approved_hours != null ? `${Number(c.approved_hours)}h` : "—"}</div></td>
+              <td style="max-width:260px;">${escapeHtml(c.appeal_reason || "—")}</td>
+              <td><span class="status-pill ${pillCls}">${escapeHtml(c.appeal_status)}</span></td>
+              <td style="white-space:nowrap;">${actions}</td>
+            </tr>
+          `;
+        }).join("");
+      }
+    }
+
+    if (attTbody) {
+      if (!attAppeals.length) {
+        attTbody.innerHTML = `<tr><td colspan="5" class="ud-empty">Chưa có khiếu nại điểm danh nào chuyển lên Admin.</td></tr>`;
+      } else {
+        attTbody.innerHTML = attAppeals.map((a) => {
+          const isPending = a.status === "ADMIN_PENDING";
+          const pillCls = isPending ? "status-pending" : a.status === "ADMIN_ACCEPTED" ? "status-approved" : "status-rejected";
+          const actions = isPending
+            ? `<button type="button" class="btn btn-primary btn-sm" onclick="adminReviewAttendanceAppeal(${Number(a.id)}, 'ACCEPTED')">Chấp nhận</button>
+               <button type="button" class="btn btn-outline btn-sm" style="color:#b91c1c;border-color:#fecaca;" onclick="adminReviewAttendanceAppeal(${Number(a.id)}, 'REJECTED')">Từ chối</button>`
+            : `<span style="color:var(--text-muted);">${escapeHtml(a.admin_note || "Đã xử lý")}</span>`;
+          return `
+            <tr>
+              <td><strong>Đơn #${Number(a.registration_id)}</strong><div class="td-subtitle">User #${Number(a.user_id)}</div></td>
+              <td style="max-width:220px;">${escapeHtml(a.reason || "—")}</td>
+              <td style="max-width:220px;">${escapeHtml(a.escalation_reason || "—")}</td>
+              <td><span class="status-pill ${pillCls}">${escapeHtml(a.status)}</span></td>
+              <td style="white-space:nowrap;">${actions}</td>
+            </tr>
+          `;
+        }).join("");
+      }
+    }
+  } catch (err) {
+    if (hourTbody) hourTbody.innerHTML = `<tr><td colspan="5" class="ud-empty" style="color:#ef4444;">${escapeHtml(extractApiError(err, "Không tải được khiếu nại giờ."))}</td></tr>`;
+    if (attTbody) attTbody.innerHTML = `<tr><td colspan="5" class="ud-empty" style="color:#ef4444;">${escapeHtml(extractApiError(err, "Không tải được khiếu nại điểm danh."))}</td></tr>`;
+  }
 }
 
-function closeModal(modalId) {
-  const modal = document.getElementById(modalId);
-  if (modal) modal.classList.remove("open");
+async function adminReviewHourAppeal(claimId, appealStatus, defaultHours) {
+  let approvedHours = null;
+  if (appealStatus === "ACCEPTED") {
+    const hoursInput = window.prompt("Nhập số giờ Admin công nhận:", String(defaultHours || ""));
+    if (hoursInput === null) return;
+    const parsed = Number(hoursInput);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      showToast("Số giờ công nhận phải lớn hơn 0.", "warning");
+      return;
+    }
+    approvedHours = parsed;
+  }
+  const note = window.prompt("Nhập ghi chú xử lý của Admin:", appealStatus === "ACCEPTED" ? "Admin chấp nhận khiếu nại" : "Admin từ chối khiếu nại");
+  if (note === null) return;
+  try {
+    await api.patch(`/hour-claims/${claimId}/appeal-review`, {
+      appeal_status: appealStatus,
+      approved_hours: approvedHours,
+      admin_note: note.trim() || null,
+    });
+    showToast("Đã xử lý khiếu nại giờ.", "success");
+    await loadAdminAppeals();
+  } catch (err) {
+    showToast(extractApiError(err, "Không thể xử lý khiếu nại giờ."), "error");
+  }
 }
+
+async function adminReviewAttendanceAppeal(appealId, decision) {
+  let checkIn = null;
+  let checkOut = null;
+  if (decision === "ACCEPTED") {
+    const inStr = window.prompt("Nhập giờ Check-in (YYYY-MM-DD HH:MM, bỏ trống nếu đã có):");
+    if (inStr === null) return;
+    const outStr = window.prompt("Nhập giờ Check-out (YYYY-MM-DD HH:MM, bỏ trống nếu đã có):");
+    if (outStr === null) return;
+    if (inStr.trim()) checkIn = inStr.trim().replace(" ", "T");
+    if (outStr.trim()) checkOut = outStr.trim().replace(" ", "T");
+  }
+  const note = window.prompt("Nhập ghi chú xử lý của Admin (tối thiểu 3 ký tự):", decision === "ACCEPTED" ? "Admin chấp nhận minh chứng điểm danh" : "Admin từ chối khiếu nại điểm danh");
+  if (note === null || note.trim().length < 3) {
+    showToast("Ghi chú Admin cần tối thiểu 3 ký tự.", "warning");
+    return;
+  }
+  try {
+    await api.patch(`/attendance-appeals/${appealId}/admin-review`, {
+      decision,
+      admin_note: note.trim(),
+      check_in_at: checkIn,
+      check_out_at: checkOut,
+    });
+    showToast("Đã xử lý khiếu nại điểm danh.", "success");
+    await loadAdminAppeals();
+  } catch (err) {
+    showToast(extractApiError(err, "Không thể xử lý khiếu nại điểm danh."), "error");
+  }
+}
+
+// Modal helpers dùng chung từ js/utils.js (VLModal / openModal / closeModal).

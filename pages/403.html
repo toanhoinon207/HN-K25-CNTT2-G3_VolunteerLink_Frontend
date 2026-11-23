@@ -6,21 +6,40 @@
   <title>403 - Không Có Quyền Truy Cập - VolunteerLink</title>
   <link rel="icon" type="image/svg+xml" href="../assets/images/logo.svg">
   <link rel="stylesheet" href="../css/style.css">
-  <link rel="stylesheet" href="../css/dashboard.css">
   <link rel="stylesheet" href="../css/responsive.css">
 </head>
-<body class="khung-a" style="display: flex; flex-direction: column; min-height: 100vh;">
+<body class="khung-a">
 
-  <main style="flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px;">
-    <div class="khung-a-center-box" style="text-align: center; max-width: 520px; padding: 40px 24px; margin: 0;">
-      <div style="font-size: 60px; margin-bottom: 12px;">🚫</div>
-      <span class="status-pill status-rejected" style="font-size: 13px; margin-bottom: 14px;">MÃ LỖI: 403 FORBIDDEN</span>
-      <h2 style="font-weight: 800; color: #0f172a; margin-bottom: 10px;">Quyền Truy Cập Bị Giới Hạn</h2>
-      <p style="color: #64748b; font-size: 14.5px; line-height: 1.6; margin-bottom: 24px;">
-        Tài khoản của bạn không có đủ thẩm quyền để xem khu vực quản trị này. Vui lòng đăng nhập bằng tài khoản có vai trò phù hợp hoặc quay về bảng điều khiển của bạn.
+  <header class="khung-a-header">
+    <div class="khung-a-header-inner">
+      <a href="home.html" class="brand-logo">
+        <div class="brand-logo-icon" aria-hidden="true">
+          <svg class="svg-icon" viewBox="0 0 24 24"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 3.5 1 9.2-1.3 7.3-6.5 8.8-9 8.8Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>
+        </div>
+        <span>Volunteer<span class="brand-accent">Link</span></span>
+      </a>
+      <a href="home.html" class="btn btn-outline btn-sm">
+        <svg class="svg-icon svg-icon-sm" viewBox="0 0 24 24"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        Quay lại Trang chủ
+      </a>
+    </div>
+  </header>
+
+  <main class="system-state-main">
+    <div class="khung-a-center-box system-state-card">
+      <div class="system-state-icon" aria-hidden="true">
+        <svg class="svg-icon svg-icon-xl" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+        </svg>
+      </div>
+      <span class="badge badge-danger" style="margin-bottom: 14px;">MÃ LỖI: 403 FORBIDDEN</span>
+      <h1 style="font-size: 1.5rem; font-weight: 800; color: var(--text-main); margin-bottom: 10px;">Quyền Truy Cập Bị Giới Hạn</h1>
+      <p style="color: var(--text-muted); font-size: 0.94rem; line-height: 1.6; margin-bottom: 24px;">
+        Tài khoản của bạn không có đủ thẩm quyền để xem khu vực này. Vui lòng đăng nhập bằng tài khoản có vai trò phù hợp hoặc quay về trang chủ.
       </p>
 
-      <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+      <div class="system-state-actions">
         <a href="home.html" class="btn btn-outline">Trang chủ</a>
         <a href="login.html" class="btn btn-primary">Đổi tài khoản đăng nhập</a>
       </div>
@@ -33,4 +52,3 @@
 
 </body>
 </html>
-

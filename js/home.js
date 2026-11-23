@@ -28,20 +28,12 @@ async function loadHomeCampaigns() {
 
   if (!featuredContainer || !upcomingContainer || !templateEl) return;
 
-  Layout.renderStateBox(
-    featuredContainer,
-    "Đang tải dữ liệu từ hệ thống...",
-    "home-state-box--loading"
-  );
-  Layout.renderStateBox(
-    upcomingContainer,
-    "Đang tải dữ liệu từ hệ thống...",
-    "home-state-box--loading"
-  );
+  Layout.renderSkeletonCards(featuredContainer, 3);
+  Layout.renderSkeletonCards(upcomingContainer, 3);
 
   const [featuredResult, upcomingResult] = await Promise.allSettled([
     api.get("/campaigns/featured", { params: { limit: 3 } }),
-    api.get("/campaigns", { params: { sort: "start_asc", page: 1, page_size: 3 } }),
+    api.get("/campaigns", { params: { status: "OPEN", sort: "start_asc", page: 1, page_size: 3 } }),
   ]);
 
   let firstErrorMessage = null;
