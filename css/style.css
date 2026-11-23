@@ -506,12 +506,13 @@ button, input, select, textarea {
 }
 
 .btn-primary {
-  background-color: var(--primary);
+  background-color: #16A34A;
   color: #FFFFFF;
-  border-color: var(--primary-dark);
+  border-color: #16A34A;
 }
 .btn-primary:hover {
-  background-color: var(--primary-dark);
+  background-color: #15803D;
+  border-color: #15803D;
   color: #FFFFFF;
 }
 
@@ -546,13 +547,25 @@ button, input, select, textarea {
 }
 
 .btn-danger {
-  background-color: var(--danger);
+  background-color: #EF4444;
   color: #FFFFFF;
-  border-color: var(--danger);
+  border-color: #EF4444;
 }
 .btn-danger:hover {
-  background-color: #991B1B;
+  background-color: #DC2626;
+  border-color: #DC2626;
   color: #FFFFFF;
+}
+
+.btn-neutral {
+  background-color: #F1F5F9;
+  color: #475569;
+  border-color: #CBD5E1;
+}
+.btn-neutral:hover {
+  background-color: #E2E8F0;
+  border-color: #94A3B8;
+  color: #0F172A;
 }
 
 .btn-sm { padding: 6px 13px; font-size: 0.82rem; }

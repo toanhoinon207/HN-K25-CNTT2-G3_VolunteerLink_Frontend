@@ -400,14 +400,14 @@
             </button>
           </div>
           <div class="table-wrapper" tabindex="0" role="region" aria-labelledby="liveAttendanceTitle">
-            <table class="ud-table org-table-fixed">
+            <table class="ud-table">
               <thead>
                 <tr>
-                  <th scope="col" style="width: 24%;">Tình nguyện viên</th>
-                  <th scope="col" style="width: 28%;">Giờ vào / Ra</th>
-                  <th scope="col" style="width: 14%;">Số giờ</th>
-                  <th scope="col" style="width: 20%;">Trạng thái</th>
-                  <th scope="col" style="width: 14%; text-align: end;">Thao tác</th>
+                  <th scope="col" style="width: 22%;">Tình nguyện viên</th>
+                  <th scope="col" style="width: 24%;">Giờ vào / Ra</th>
+                  <th scope="col" style="width: 12%;">Số giờ</th>
+                  <th scope="col" style="width: 18%;">Trạng thái</th>
+                  <th scope="col" style="width: 24%; text-align: end;">Thao tác</th>
                 </tr>
               </thead>
               <tbody id="liveAttendanceTbody"></tbody>
@@ -500,7 +500,7 @@
             <span class="org-bulk-count" id="volBulkCountText">(Đã chọn 0 đơn)</span>
           </label>
           <div class="org-bulk-actions">
-            <button type="button" class="btn btn-outline btn-sm btn-action-danger" onclick="openBulkRejectModal()">✕ Từ chối</button>
+            <button type="button" class="btn btn-danger btn-sm" onclick="openBulkRejectModal()">✕ Từ chối</button>
             <button type="button" class="btn btn-primary btn-sm" onclick="bulkApproveVolunteers()">✓ Duyệt</button>
           </div>
         </div>
@@ -556,6 +556,9 @@
       <div class="ud-card">
         <div class="ud-card-header">
           <h2 id="orgClaimsTitle">Yêu cầu khiếu nại giờ</h2>
+          <button type="button" id="refreshOrgClaimsBtn" class="btn btn-outline btn-sm org-icon-btn" onclick="renderCertificatesAndClaims(true, this)" aria-label="Làm mới yêu cầu khiếu nại giờ" title="Làm mới">
+            <svg class="svg-icon" aria-hidden="true" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          </button>
         </div>
         <div class="table-wrapper" tabindex="0" role="region" aria-labelledby="orgClaimsTitle">
           <table class="ud-table">
@@ -575,6 +578,9 @@
       <div class="ud-card">
         <div class="ud-card-header">
           <h2 id="orgIssuedCertsTitle">Chứng chỉ đã phát hành</h2>
+          <button type="button" id="refreshOrgIssuedCertsBtn" class="btn btn-outline btn-sm org-icon-btn" onclick="renderCertificatesAndClaims(true, this)" aria-label="Làm mới chứng chỉ đã phát hành" title="Làm mới">
+            <svg class="svg-icon" aria-hidden="true" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          </button>
         </div>
         <div class="table-wrapper" tabindex="0" role="region" aria-labelledby="orgIssuedCertsTitle">
           <table class="ud-table">
@@ -660,6 +666,31 @@
             </div>
 
             <button type="button" class="btn btn-primary" onclick="saveOrgProfile()">Lưu thay đổi</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="ud-card" style="margin-top: 20px;">
+        <div class="ud-card-header">
+          <h2>Đổi mật khẩu tài khoản</h2>
+        </div>
+        <div class="ud-card-body">
+          <form onsubmit="return false;">
+            <div class="ud-form-grid">
+              <div class="ud-field">
+                <label for="orgOldPassword">Mật khẩu hiện tại</label>
+                <input type="password" id="orgOldPassword" class="ud-control" autocomplete="current-password" placeholder="Nhập mật khẩu đang sử dụng">
+              </div>
+              <div class="ud-field">
+                <label for="orgNewPassword">Mật khẩu mới (tối thiểu 8 ký tự)</label>
+                <input type="password" id="orgNewPassword" class="ud-control" autocomplete="new-password" minlength="8" placeholder="Nhập mật khẩu mới">
+              </div>
+            </div>
+            <div class="ud-field" style="max-width: 480px;">
+              <label for="orgConfirmPassword">Xác nhận mật khẩu mới</label>
+              <input type="password" id="orgConfirmPassword" class="ud-control" autocomplete="new-password" minlength="8" placeholder="Nhập lại mật khẩu mới">
+            </div>
+            <button type="button" class="btn btn-primary" id="btnChangeOrgPassword" onclick="submitOrgChangePassword()">Đổi mật khẩu</button>
           </form>
         </div>
       </div>
@@ -889,7 +920,7 @@
         </div>
       </div>
       <div class="dash-modal-footer org-camp-modal-footer">
-        <button type="button" class="btn btn-outline btn-action-danger" id="deleteCampaignBtn" hidden onclick="toggleCancelCampaignBox(true)">Xóa chiến dịch</button>
+        <button type="button" class="btn btn-danger" id="deleteCampaignBtn" hidden onclick="toggleCancelCampaignBox(true)">Xóa chiến dịch</button>
         <div class="org-camp-footer-right">
           <button type="button" class="btn btn-outline" id="createCampaignCloseBtn" onclick="handleCampaignModalSecondaryCancel()">Hủy</button>
           <button type="button" class="btn btn-outline" id="updateCampaignBtn" hidden onclick="handleUpdateOrSaveCampaign()">Chỉnh sửa thông tin</button>
@@ -1001,7 +1032,7 @@
       </div>
       <div class="dash-modal-footer">
         <button type="button" class="btn btn-outline" onclick="closeModal('rejectClaimModal')">Hủy</button>
-        <button type="button" class="btn btn-action-danger" id="confirmRejectClaimBtn" onclick="confirmRejectHourClaim()">Xác nhận từ chối</button>
+        <button type="button" class="btn btn-danger" id="confirmRejectClaimBtn" onclick="confirmRejectHourClaim()">Xác nhận từ chối</button>
       </div>
     </div>
   </div>

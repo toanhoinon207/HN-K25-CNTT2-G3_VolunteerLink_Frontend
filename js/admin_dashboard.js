@@ -14,6 +14,8 @@ let allOrganizations = [];
 let allCampaigns = [];
 let allUsers = [];
 let allCertificates = [];
+let allHourAppeals = [];
+let allAttendanceAppeals = [];
 
 function renderAdminPaginatedRows(tbody, items, _pageKey, colspan, emptyText, mapRow) {
   if (!tbody) return;
@@ -219,7 +221,7 @@ function renderOverviewStats() {
             <td>
               <div style="display:inline-flex;gap:6px;">
                 <button type="button" class="btn btn-primary btn-sm" onclick="approveOrganization(${Number(org.id)})">Duyệt</button>
-                <button type="button" class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="openRejectOrgModal(${Number(org.id)})">Từ chối</button>
+                <button type="button" class="btn btn-danger btn-sm" onclick="openRejectOrgModal(${Number(org.id)})">Từ chối</button>
               </div>
             </td>
           </tr>
@@ -245,7 +247,7 @@ function renderOverviewStats() {
             <td>
               <div style="display:inline-flex;gap:6px;">
                 <button type="button" class="btn btn-primary btn-sm" onclick="approveCampaign(${Number(c.id)})">Duyệt</button>
-                <button type="button" class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="openRejectCampModal(${Number(c.id)})">Từ chối</button>
+                <button type="button" class="btn btn-danger btn-sm" onclick="openRejectCampModal(${Number(c.id)})">Từ chối</button>
               </div>
             </td>
           </tr>
@@ -282,16 +284,31 @@ async function checkBackendHealth(showNotification = false) {
 
 /* ==================== TAB 2: TỔ CHỨC ==================== */
 
-async function loadAdminOrganizations() {
+async function loadAdminOrganizations(manual = false, triggerBtn = null) {
   const tbody = document.getElementById("adminOrgsTbody");
+  const quickTbody = document.getElementById("quickPendingOrgsTbody");
+  const startedAt = Date.now();
+  if (manual) {
+    setRefreshSpin(triggerBtn, true);
+    if (tbody) tbody.classList.add("is-refreshing");
+    if (quickTbody) quickTbody.classList.add("is-refreshing");
+  }
   try {
     const res = await api.get("/admin/organizations");
+    if (manual) await waitMinSpin(startedAt);
     allOrganizations = Array.isArray(res.data) ? res.data : [];
     filterAdminOrgs();
+    renderOverviewStats();
+    if (manual) showToast("Đã cập nhật danh sách tổ chức.", "success");
   } catch (error) {
     if (tbody) {
       tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--danger);padding:20px;">${escapeHtml(extractApiError(error, "Không thể tải danh sách tổ chức."))}</td></tr>`;
     }
+    if (manual) showToast(extractApiError(error, "Không thể tải danh sách tổ chức."), "error");
+  } finally {
+    if (tbody) tbody.classList.remove("is-refreshing");
+    if (quickTbody) quickTbody.classList.remove("is-refreshing");
+    if (manual) setRefreshSpin(triggerBtn, false);
   }
 }
 
@@ -320,7 +337,7 @@ function filterAdminOrgs() {
         org.status === "PENDING"
           ? `<div style="display:inline-flex;gap:6px;">
               <button type="button" class="btn btn-primary btn-sm" onclick="approveOrganization(${Number(org.id)})">Duyệt</button>
-              <button type="button" class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="openRejectOrgModal(${Number(org.id)})">Từ chối</button>
+              <button type="button" class="btn btn-danger btn-sm" onclick="openRejectOrgModal(${Number(org.id)})">Từ chối</button>
             </div>`
           : `<span style="color:var(--text-muted);font-size:0.82rem;">Đã xử lý</span>`;
 
@@ -435,7 +452,7 @@ function openOrgDetailModal(orgId) {
     footer.innerHTML = org.status === "PENDING"
       ? `
         <button type="button" class="btn btn-outline" onclick="closeModal('orgDetailModal')">Đóng</button>
-        <button type="button" class="btn btn-outline" style="color:var(--danger);border-color:#fecaca;" onclick="closeModal('orgDetailModal'); openRejectOrgModal(${Number(org.id)})">Từ chối</button>
+        <button type="button" class="btn btn-danger" onclick="closeModal('orgDetailModal'); openRejectOrgModal(${Number(org.id)})">Từ chối</button>
         <button type="button" class="btn btn-primary" onclick="approveOrganization(${Number(org.id)}).then(() => closeModal('orgDetailModal'))">✓ Phê duyệt</button>
       `
       : `<button type="button" class="btn btn-outline" onclick="closeModal('orgDetailModal')">Đóng</button>`;
@@ -485,13 +502,21 @@ async function submitRejectOrg() {
 
 /* ==================== TAB 3: CHIẾN DỊCH ==================== */
 
-async function loadAdminCampaigns() {
+async function loadAdminCampaigns(manual = false, triggerBtn = null) {
   const tbody = document.getElementById("adminCampsTbody");
+  const quickTbody = document.getElementById("quickPendingCampsTbody");
+  const startedAt = Date.now();
+  if (manual) {
+    setRefreshSpin(triggerBtn, true);
+    if (tbody) tbody.classList.add("is-refreshing");
+    if (quickTbody) quickTbody.classList.add("is-refreshing");
+  }
   try {
     const [pendingRes, publicRes] = await Promise.all([
       api.get("/admin/campaigns/pending"),
       api.get("/campaigns", { params: { page: 1, page_size: 100 } }),
     ]);
+    if (manual) await waitMinSpin(startedAt);
     const pendingItems = Array.isArray(pendingRes.data) ? pendingRes.data : [];
     const publicItems = Array.isArray(publicRes.data?.items) ? publicRes.data.items : [];
 
@@ -502,10 +527,17 @@ async function loadAdminCampaigns() {
     });
     allCampaigns = Array.from(mergedMap.values()).sort((a, b) => b.id - a.id);
     filterAdminCamps();
+    renderOverviewStats();
+    if (manual) showToast("Đã cập nhật danh sách chiến dịch.", "success");
   } catch (error) {
     if (tbody) {
       tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--danger);padding:20px;">${escapeHtml(extractApiError(error, "Không thể tải danh sách chiến dịch."))}</td></tr>`;
     }
+    if (manual) showToast(extractApiError(error, "Không thể tải danh sách chiến dịch."), "error");
+  } finally {
+    if (tbody) tbody.classList.remove("is-refreshing");
+    if (quickTbody) quickTbody.classList.remove("is-refreshing");
+    if (manual) setRefreshSpin(triggerBtn, false);
   }
 }
 
@@ -537,7 +569,7 @@ function filterAdminCamps() {
         c.status === "PENDING"
           ? `<div style="display:inline-flex;gap:6px;">
               <button type="button" class="btn btn-primary btn-sm" onclick="approveCampaign(${Number(c.id)})">Duyệt</button>
-              <button type="button" class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="openRejectCampModal(${Number(c.id)})">Từ chối</button>
+              <button type="button" class="btn btn-danger btn-sm" onclick="openRejectCampModal(${Number(c.id)})">Từ chối</button>
             </div>`
           : `<span style="color:var(--text-muted);font-size:0.82rem;">Đã xử lý</span>`;
 
@@ -611,16 +643,27 @@ async function submitRejectCamp() {
 
 /* ==================== TAB 4: NGƯỜI DÙNG ==================== */
 
-async function loadAdminUsers() {
+async function loadAdminUsers(manual = false, triggerBtn = null) {
   const tbody = document.getElementById("adminUsersTbody");
+  const startedAt = Date.now();
+  if (manual) {
+    setRefreshSpin(triggerBtn, true);
+    if (tbody) tbody.classList.add("is-refreshing");
+  }
   try {
     const res = await api.get("/admin/users");
+    if (manual) await waitMinSpin(startedAt);
     allUsers = Array.isArray(res.data) ? res.data : [];
     filterAdminUsers();
+    if (manual) showToast("Đã cập nhật danh sách người dùng.", "success");
   } catch (error) {
     if (tbody) {
       tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--danger);padding:20px;">${escapeHtml(extractApiError(error, "Không thể tải danh sách người dùng."))}</td></tr>`;
     }
+    if (manual) showToast(extractApiError(error, "Không thể tải danh sách người dùng."), "error");
+  } finally {
+    if (tbody) tbody.classList.remove("is-refreshing");
+    if (manual) setRefreshSpin(triggerBtn, false);
   }
 }
 
@@ -664,7 +707,7 @@ function filterAdminUsers() {
                 ? `<span style="font-size:0.8rem;color:var(--text-muted);">Tài khoản hiện tại</span>`
                 : `<div style="display:flex;gap:6px;flex-wrap:wrap;">
                     <button type="button" class="btn btn-outline btn-sm" onclick="openChangeRoleModal(${Number(u.id)})">Đổi vai trò</button>
-                    <button type="button" class="btn btn-outline btn-sm" style="color:${isActive ? "var(--danger)" : "var(--primary)"};" onclick="toggleUserStatus(${Number(u.id)}, '${nextStatus}')">${lockLabel}</button>
+                    <button type="button" class="btn ${isActive ? "btn-danger" : "btn-primary"} btn-sm" onclick="toggleUserStatus(${Number(u.id)}, '${nextStatus}')">${lockLabel}</button>
                   </div>`
             }
           </td>
@@ -708,16 +751,27 @@ async function submitChangeUserRole() {
 
 /* ==================== TAB 5: CHỨNG CHỈ ==================== */
 
-async function loadAdminCertificates() {
+async function loadAdminCertificates(manual = false, triggerBtn = null) {
   const tbody = document.getElementById("adminCertsTbody");
+  const startedAt = Date.now();
+  if (manual) {
+    setRefreshSpin(triggerBtn, true);
+    if (tbody) tbody.classList.add("is-refreshing");
+  }
   try {
     const res = await api.get("/admin/certificates");
+    if (manual) await waitMinSpin(startedAt);
     allCertificates = Array.isArray(res.data) ? res.data : [];
     filterAdminCerts();
+    if (manual) showToast("Đã cập nhật danh sách chứng chỉ.", "success");
   } catch (error) {
     if (tbody) {
       tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--danger);padding:20px;">${escapeHtml(extractApiError(error, "Không thể tải danh sách chứng chỉ."))}</td></tr>`;
     }
+    if (manual) showToast(extractApiError(error, "Không thể tải danh sách chứng chỉ."), "error");
+  } finally {
+    if (tbody) tbody.classList.remove("is-refreshing");
+    if (manual) setRefreshSpin(triggerBtn, false);
   }
 }
 
@@ -755,7 +809,7 @@ function filterAdminCerts() {
           <td>
             ${
               isActive
-                ? `<button type="button" class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="openRevokeCertModal(${Number(cert.id)})">Thu hồi</button>`
+                ? `<button type="button" class="btn btn-danger btn-sm" onclick="openRevokeCertModal(${Number(cert.id)})">Thu hồi</button>`
                 : `<span style="font-size:0.8rem;color:var(--text-muted);">Đã thu hồi</span>`
             }
           </td>
@@ -812,19 +866,64 @@ function exportSystemReport() {
 
 /* ==================== TAB 5.5: KHIẾU NẠI HỆ THỐNG ==================== */
 
-async function loadAdminAppeals() {
+function toAdminDatetimeLocal(value) {
+  const d = typeof parseApiDate === "function" ? parseApiDate(value) : new Date(value);
+  if (!d || isNaN(d.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function formatAppealSlaBadge(slaDeadline, isPending, resolvedAt) {
+  const deadlineDate = typeof parseApiDate === "function" ? parseApiDate(slaDeadline) : (slaDeadline ? new Date(slaDeadline) : null);
+  if (!deadlineDate || isNaN(deadlineDate.getTime())) {
+    return `<span class="td-subtitle">Trong vòng 48 giờ</span>`;
+  }
+  const deadlineStr = typeof formatDateTime === "function" ? formatDateTime(deadlineDate) : deadlineDate.toLocaleString("vi-VN");
+  if (!isPending) {
+    const resolvedDate = resolvedAt ? (typeof parseApiDate === "function" ? parseApiDate(resolvedAt) : new Date(resolvedAt)) : null;
+    const onTime = !resolvedDate || resolvedDate.getTime() <= deadlineDate.getTime();
+    return `
+      <div><span class="status-pill ${onTime ? "status-approved" : "status-closed"}" style="font-size:0.75rem;">${onTime ? "Đã xử lý (Đúng hạn 48h)" : "Đã xử lý"}</span></div>
+      <div class="td-subtitle">Hạn: ${escapeHtml(deadlineStr)}</div>
+    `;
+  }
+  const diffMs = deadlineDate.getTime() - Date.now();
+  if (diffMs <= 0) {
+    return `
+      <div><span class="status-pill status-rejected" style="font-size:0.75rem;">Quá hạn 48h</span></div>
+      <div class="td-subtitle">Hạn: ${escapeHtml(deadlineStr)}</div>
+    `;
+  }
+  const hoursLeft = Math.max(1, Math.ceil(diffMs / 3600000));
+  return `
+    <div><span class="status-pill status-pending" style="font-size:0.75rem;">Còn ~${hoursLeft}h / 48h</span></div>
+    <div class="td-subtitle">Hạn: ${escapeHtml(deadlineStr)}</div>
+  `;
+}
+
+async function loadAdminAppeals(manual = false, triggerBtn = null) {
   const hourTbody = document.getElementById("adminHourAppealsTbody");
   const attTbody = document.getElementById("adminAttendanceAppealsTbody");
   const badge = document.getElementById("pendingAppealsBadge");
+  const startedAt = Date.now();
+
+  if (manual) {
+    setRefreshSpin(triggerBtn, true);
+    if (hourTbody) hourTbody.classList.add("is-refreshing");
+    if (attTbody) attTbody.classList.add("is-refreshing");
+  }
 
   try {
     const [hourRes, attRes] = await Promise.all([
       api.get("/hour-claims"),
       api.get("/attendance-appeals/admin"),
     ]);
+    if (manual) await waitMinSpin(startedAt);
 
     const hourClaims = (Array.isArray(hourRes.data) ? hourRes.data : []).filter((c) => Boolean(c.appeal_status));
     const attAppeals = Array.isArray(attRes.data) ? attRes.data : [];
+    allHourAppeals = hourClaims;
+    allAttendanceAppeals = attAppeals;
 
     const pendingCount =
       hourClaims.filter((c) => c.appeal_status === "PENDING").length +
@@ -833,21 +932,36 @@ async function loadAdminAppeals() {
 
     if (hourTbody) {
       if (!hourClaims.length) {
-        hourTbody.innerHTML = `<tr><td colspan="5" class="ud-empty">Chưa có khiếu nại giờ nào.</td></tr>`;
+        hourTbody.innerHTML = `<tr><td colspan="6" class="ud-empty">Chưa có khiếu nại giờ nào.</td></tr>`;
       } else {
         hourTbody.innerHTML = hourClaims.map((c) => {
           const isPending = c.appeal_status === "PENDING";
           const pillCls = isPending ? "status-pending" : c.appeal_status === "ACCEPTED" ? "status-approved" : "status-rejected";
+          const statusLabel = isPending ? "Chờ Admin" : c.appeal_status === "ACCEPTED" ? "Đã chấp nhận" : "Đã từ chối";
+          const slaHtml = formatAppealSlaBadge(c.sla_deadline, isPending, c.resolved_at);
           const actions = isPending
-            ? `<button type="button" class="btn btn-primary btn-sm" onclick="adminReviewHourAppeal(${Number(c.id)}, 'ACCEPTED', ${Number(c.claimed_hours || 0)})">Chấp nhận</button>
-               <button type="button" class="btn btn-outline btn-sm" style="color:#b91c1c;border-color:#fecaca;" onclick="adminReviewHourAppeal(${Number(c.id)}, 'REJECTED', 0)">Từ chối</button>`
-            : `<span style="color:var(--text-muted);">${escapeHtml(c.admin_note || "Đã xử lý")}</span>`;
+            ? `<div style="display:inline-flex;gap:6px;flex-wrap:wrap;">
+                 <button type="button" class="btn btn-outline btn-sm" onclick="openAdminHourAppealModal(${Number(c.id)}, 'DETAIL')">Chi tiết</button>
+                 <button type="button" class="btn btn-primary btn-sm" onclick="openAdminHourAppealModal(${Number(c.id)}, 'ACCEPTED')">Chấp nhận</button>
+                 <button type="button" class="btn btn-danger btn-sm" onclick="openAdminHourAppealModal(${Number(c.id)}, 'REJECTED')">Từ chối</button>
+               </div>`
+            : `<div style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                 <button type="button" class="btn btn-outline btn-sm" onclick="openAdminHourAppealModal(${Number(c.id)}, 'DETAIL')">Chi tiết</button>
+                 <span style="color:var(--text-muted);font-size:0.82rem;">${escapeHtml(c.admin_note || "Đã xử lý")}</span>
+               </div>`;
           return `
             <tr>
-              <td><div class="td-title">${escapeHtml(c.user_name || `User #${c.user_id}`)}</div><div class="td-subtitle">${escapeHtml(c.campaign_title || `Đơn #${c.registration_id}`)}</div></td>
-              <td><strong>${Number(c.claimed_hours || 0)}h</strong><div class="td-subtitle">Đã duyệt: ${c.approved_hours != null ? `${Number(c.approved_hours)}h` : "—"}</div></td>
-              <td style="max-width:260px;">${escapeHtml(c.appeal_reason || "—")}</td>
-              <td><span class="status-pill ${pillCls}">${escapeHtml(c.appeal_status)}</span></td>
+              <td>
+                <div class="td-title">${escapeHtml(c.user_name || `User #${c.user_id}`)}</div>
+                <div class="td-subtitle">${escapeHtml(c.campaign_title || `Đơn #${c.registration_id}`)}</div>
+              </td>
+              <td>
+                <div>Đề nghị: <strong>${Number(c.claimed_hours || 0)}h</strong></div>
+                <div class="td-subtitle">Điểm danh: ${Number(c.actual_hours || 0)}h · Org duyệt: ${c.approved_hours != null ? `${Number(c.approved_hours)}h` : "0h"}</div>
+              </td>
+              <td style="max-width:240px;">${escapeHtml(c.appeal_reason || "—")}</td>
+              <td>${slaHtml}</td>
+              <td><span class="status-pill ${pillCls}">${escapeHtml(statusLabel)}</span></td>
               <td style="white-space:nowrap;">${actions}</td>
             </tr>
           `;
@@ -857,84 +971,389 @@ async function loadAdminAppeals() {
 
     if (attTbody) {
       if (!attAppeals.length) {
-        attTbody.innerHTML = `<tr><td colspan="5" class="ud-empty">Chưa có khiếu nại điểm danh nào chuyển lên Admin.</td></tr>`;
+        attTbody.innerHTML = `<tr><td colspan="6" class="ud-empty">Chưa có khiếu nại điểm danh nào chuyển lên Admin.</td></tr>`;
       } else {
         attTbody.innerHTML = attAppeals.map((a) => {
           const isPending = a.status === "ADMIN_PENDING";
           const pillCls = isPending ? "status-pending" : a.status === "ADMIN_ACCEPTED" ? "status-approved" : "status-rejected";
+          const statusLabel = isPending ? "Chờ Admin" : a.status === "ADMIN_ACCEPTED" ? "Đã chấp nhận" : "Đã từ chối";
+          const slaHtml = formatAppealSlaBadge(a.sla_deadline, isPending, a.admin_resolved_at);
           const actions = isPending
-            ? `<button type="button" class="btn btn-primary btn-sm" onclick="adminReviewAttendanceAppeal(${Number(a.id)}, 'ACCEPTED')">Chấp nhận</button>
-               <button type="button" class="btn btn-outline btn-sm" style="color:#b91c1c;border-color:#fecaca;" onclick="adminReviewAttendanceAppeal(${Number(a.id)}, 'REJECTED')">Từ chối</button>`
-            : `<span style="color:var(--text-muted);">${escapeHtml(a.admin_note || "Đã xử lý")}</span>`;
+            ? `<div style="display:inline-flex;gap:6px;flex-wrap:wrap;">
+                 <button type="button" class="btn btn-outline btn-sm" onclick="openAdminAttendanceAppealModal(${Number(a.id)}, 'DETAIL')">Chi tiết</button>
+                 <button type="button" class="btn btn-primary btn-sm" onclick="openAdminAttendanceAppealModal(${Number(a.id)}, 'ACCEPTED')">Chấp nhận</button>
+                 <button type="button" class="btn btn-danger btn-sm" onclick="openAdminAttendanceAppealModal(${Number(a.id)}, 'REJECTED')">Từ chối</button>
+               </div>`
+            : `<div style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                 <button type="button" class="btn btn-outline btn-sm" onclick="openAdminAttendanceAppealModal(${Number(a.id)}, 'DETAIL')">Chi tiết</button>
+                 <span style="color:var(--text-muted);font-size:0.82rem;">${escapeHtml(a.admin_note || "Đã xử lý")}</span>
+               </div>`;
           return `
             <tr>
-              <td><strong>Đơn #${Number(a.registration_id)}</strong><div class="td-subtitle">User #${Number(a.user_id)}</div></td>
-              <td style="max-width:220px;">${escapeHtml(a.reason || "—")}</td>
-              <td style="max-width:220px;">${escapeHtml(a.escalation_reason || "—")}</td>
-              <td><span class="status-pill ${pillCls}">${escapeHtml(a.status)}</span></td>
+              <td>
+                <div class="td-title">${escapeHtml(a.user_name || `User #${a.user_id}`)}</div>
+                <div class="td-subtitle">${escapeHtml(a.campaign_title || `Đơn #${a.registration_id}`)}</div>
+              </td>
+              <td style="max-width:210px;">${escapeHtml(a.reason || "—")}</td>
+              <td style="max-width:210px;">${escapeHtml(a.escalation_reason || "—")}</td>
+              <td>${slaHtml}</td>
+              <td><span class="status-pill ${pillCls}">${escapeHtml(statusLabel)}</span></td>
               <td style="white-space:nowrap;">${actions}</td>
             </tr>
           `;
         }).join("");
       }
     }
+    if (manual) showToast("Đã cập nhật danh sách khiếu nại.", "success");
   } catch (err) {
-    if (hourTbody) hourTbody.innerHTML = `<tr><td colspan="5" class="ud-empty" style="color:#ef4444;">${escapeHtml(extractApiError(err, "Không tải được khiếu nại giờ."))}</td></tr>`;
-    if (attTbody) attTbody.innerHTML = `<tr><td colspan="5" class="ud-empty" style="color:#ef4444;">${escapeHtml(extractApiError(err, "Không tải được khiếu nại điểm danh."))}</td></tr>`;
+    if (hourTbody) hourTbody.innerHTML = `<tr><td colspan="6" class="ud-empty" style="color:#ef4444;">${escapeHtml(extractApiError(err, "Không tải được khiếu nại giờ."))}</td></tr>`;
+    if (attTbody) attTbody.innerHTML = `<tr><td colspan="6" class="ud-empty" style="color:#ef4444;">${escapeHtml(extractApiError(err, "Không tải được khiếu nại điểm danh."))}</td></tr>`;
+    if (manual) showToast(extractApiError(err, "Không thể cập nhật danh sách khiếu nại."), "error");
+  } finally {
+    if (hourTbody) hourTbody.classList.remove("is-refreshing");
+    if (attTbody) attTbody.classList.remove("is-refreshing");
+    if (manual) setRefreshSpin(triggerBtn, false);
   }
 }
 
-async function adminReviewHourAppeal(claimId, appealStatus, defaultHours) {
+function openAdminHourAppealModal(claimId, mode = "DETAIL") {
+  const claim = allHourAppeals.find((c) => Number(c.id) === Number(claimId));
+  if (!claim) {
+    showToast("Không tìm thấy dữ liệu khiếu nại giờ.", "error");
+    return;
+  }
+
+  const isPending = claim.appeal_status === "PENDING";
+  const effectiveMode = isPending ? (mode === "REJECTED" ? "REJECTED" : "ACCEPTED") : "DETAIL";
+
+  document.getElementById("adminHourAppealId").value = String(claim.id);
+  document.getElementById("adminHourAppealMode").value = effectiveMode;
+
+  const titleEl = document.getElementById("adminHourAppealModalTitle");
+  if (titleEl) {
+    titleEl.textContent = !isPending
+      ? `Chi tiết khiếu nại giờ #${claim.id}`
+      : effectiveMode === "REJECTED"
+        ? `Từ chối khiếu nại giờ #${claim.id}`
+        : `Đối chiếu & Xử lý khiếu nại giờ #${claim.id}`;
+  }
+
+  const detailBody = document.getElementById("adminHourAppealDetailBody");
+  const actualHours = Number(claim.actual_hours || 0);
+  const claimedHours = Number(claim.claimed_hours || 0);
+  const approvedHours = claim.approved_hours != null ? Number(claim.approved_hours) : null;
+  const estHours = claim.campaign_estimated_hours != null ? Number(claim.campaign_estimated_hours) : null;
+  const evidenceUrl = claim.appeal_evidence_url || claim.evidence_url;
+  const evidenceHtml = isSafeHttpUrl(evidenceUrl)
+    ? `<a href="${escapeHtml(evidenceUrl)}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm">Mở minh chứng ↗</a>`
+    : `<span style="color:var(--text-muted);">Không đính kèm link minh chứng</span>`;
+
+  if (detailBody) {
+    detailBody.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;">
+        <div style="padding:12px 14px;border-radius:12px;background:var(--surface-alt,#f8fafc);border:1px solid var(--border);">
+          <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;">1. Hồ sơ &amp; Dữ liệu điểm danh thực tế</div>
+          <div style="display:grid;gap:6px;font-size:0.86rem;">
+            <div><strong>Tình nguyện viên:</strong> ${escapeHtml(claim.user_name || `User #${claim.user_id}`)} ${claim.user_email ? `(${escapeHtml(claim.user_email)})` : ""}</div>
+            <div><strong>Chiến dịch:</strong> ${escapeHtml(claim.campaign_title || `Đơn #${claim.registration_id}`)}</div>
+            <div><strong>Tổ chức:</strong> ${escapeHtml(claim.organization_name || "—")}</div>
+            <div><strong>Khung giờ chiến dịch:</strong> ${escapeHtml(safeFormatDateTime(claim.campaign_start_time))} → ${escapeHtml(safeFormatDateTime(claim.campaign_end_time))} ${estHours != null ? `(${estHours}h dự kiến)` : ""}</div>
+            <div><strong>Check-in / Check-out:</strong> ${escapeHtml(safeFormatDateTime(claim.attendance_check_in_at))} → ${escapeHtml(safeFormatDateTime(claim.attendance_check_out_at))} (${claim.attendance_total_minutes ?? 0} phút)</div>
+            <div><strong>Giờ điểm danh hợp lệ (tối đa):</strong> <span style="color:var(--primary);font-weight:700;">${actualHours} giờ</span></div>
+            <div><strong>Kết quả Organizer xử lý:</strong> ${approvedHours != null ? `Đã duyệt ${approvedHours} giờ` : "Từ chối (0 giờ)"}</div>
+            ${claim.rejection_reason ? `<div style="color:#b91c1c;"><strong>Lý do Organizer từ chối:</strong> ${escapeHtml(claim.rejection_reason)}</div>` : ""}
+          </div>
+        </div>
+
+        <div style="padding:12px 14px;border-radius:12px;background:#ffffff;border:1px solid var(--border);">
+          <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;">2. Nội dung khiếu nại &amp; SLA 48 giờ</div>
+          <div style="display:grid;gap:8px;font-size:0.86rem;">
+            <div><strong>Số giờ TNV đề nghị:</strong> <span style="font-weight:700;">${claimedHours} giờ</span></div>
+            <div><strong>Ghi chú ban đầu của TNV:</strong> ${escapeHtml(claim.note || "—")}</div>
+            <div><strong>Lý do khiếu nại lên Admin:</strong>
+              <div style="margin-top:4px;padding:8px 10px;border-radius:8px;background:var(--surface-alt,#f8fafc);border:1px solid var(--border);white-space:pre-line;">${escapeHtml(claim.appeal_reason || "—")}</div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+              <strong>Minh chứng:</strong> ${evidenceHtml}
+            </div>
+            <div><strong>Hạn xử lý (SLA 48h):</strong> ${escapeHtml(safeFormatDateTime(claim.sla_deadline))}</div>
+            ${!isPending ? `<div><strong>Phản hồi của Admin:</strong> ${escapeHtml(claim.admin_note || "Đã xử lý")} (lúc ${escapeHtml(safeFormatDateTime(claim.resolved_at))})</div>` : ""}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  const formSection = document.getElementById("adminHourAppealFormSection");
+  const hoursField = document.getElementById("adminHourAppealHoursField");
+  const hoursInput = document.getElementById("adminHourAppealApprovedInput");
+  const maxHint = document.getElementById("adminHourAppealMaxHint");
+  const noteInput = document.getElementById("adminHourAppealNoteInput");
+  const footer = document.getElementById("adminHourAppealModalFooter");
+
+  if (formSection) formSection.hidden = !isPending;
+  if (isPending) {
+    const suggestedHours = actualHours > 0 ? Math.min(claimedHours, actualHours) : claimedHours;
+    if (hoursField) hoursField.hidden = effectiveMode === "REJECTED";
+    if (hoursInput) {
+      hoursInput.max = actualHours > 0 ? String(actualHours) : "";
+      hoursInput.value = String(suggestedHours > 0 ? suggestedHours : "");
+    }
+    if (maxHint) {
+      maxHint.textContent = `Giới hạn tối đa theo điểm danh hợp lệ: ${actualHours} giờ (TNV đề nghị: ${claimedHours} giờ).`;
+    }
+    if (noteInput) {
+      noteInput.value = effectiveMode === "REJECTED"
+        ? "Admin đã đối chiếu dữ liệu điểm danh và giữ nguyên kết quả của Nhà tổ chức."
+        : "Admin đã đối chiếu dữ liệu điểm danh và chấp nhận điều chỉnh số giờ công nhận.";
+    }
+  }
+
+  if (footer) {
+    if (!isPending) {
+      footer.innerHTML = `<button type="button" class="btn btn-outline" onclick="closeModal('adminHourAppealModal')">Đóng</button>`;
+    } else {
+      footer.innerHTML = `
+        <button type="button" class="btn btn-outline" onclick="closeModal('adminHourAppealModal')">Hủy</button>
+        <button type="button" class="btn btn-danger" onclick="submitAdminHourAppeal('REJECTED')">Từ chối khiếu nại</button>
+        <button type="button" class="btn btn-primary" onclick="submitAdminHourAppeal('ACCEPTED')">✓ Chấp nhận &amp; Công nhận giờ</button>
+      `;
+    }
+  }
+
+  openModal("adminHourAppealModal");
+}
+
+function adminReviewHourAppeal(claimId, appealStatus) {
+  openAdminHourAppealModal(claimId, appealStatus);
+}
+
+async function submitAdminHourAppeal(decisionOverride) {
+  const claimId = Number(document.getElementById("adminHourAppealId")?.value || 0);
+  const claim = allHourAppeals.find((c) => Number(c.id) === claimId);
+  const appealStatus = decisionOverride || document.getElementById("adminHourAppealMode")?.value || "ACCEPTED";
+  const hoursInput = document.getElementById("adminHourAppealApprovedInput");
+  const hoursField = document.getElementById("adminHourAppealHoursField");
+  const noteInput = document.getElementById("adminHourAppealNoteInput");
+
+  if (!claimId) return;
+
   let approvedHours = null;
   if (appealStatus === "ACCEPTED") {
-    const hoursInput = window.prompt("Nhập số giờ Admin công nhận:", String(defaultHours || ""));
-    if (hoursInput === null) return;
-    const parsed = Number(hoursInput);
+    if (hoursField && hoursField.hidden) {
+      hoursField.hidden = false;
+      hoursInput?.focus();
+      return;
+    }
+    const parsed = Number(hoursInput?.value);
     if (!Number.isFinite(parsed) || parsed <= 0) {
-      showToast("Số giờ công nhận phải lớn hơn 0.", "warning");
+      showToast("Số giờ Admin công nhận phải lớn hơn 0.", "warning");
+      hoursInput?.focus();
+      return;
+    }
+    const actualMax = Number(claim?.actual_hours || 0);
+    if (actualMax > 0 && parsed > actualMax) {
+      showToast(`Số giờ công nhận không được vượt quá giờ điểm danh thực tế (${actualMax}h).`, "warning");
+      hoursInput?.focus();
       return;
     }
     approvedHours = parsed;
   }
-  const note = window.prompt("Nhập ghi chú xử lý của Admin:", appealStatus === "ACCEPTED" ? "Admin chấp nhận khiếu nại" : "Admin từ chối khiếu nại");
-  if (note === null) return;
+
+  const note = (noteInput?.value || "").trim();
+  if (!note) {
+    showToast("Vui lòng nhập ghi chú quyết định của Admin.", "warning");
+    noteInput?.focus();
+    return;
+  }
+
   try {
     await api.patch(`/hour-claims/${claimId}/appeal-review`, {
       appeal_status: appealStatus,
       approved_hours: approvedHours,
-      admin_note: note.trim() || null,
+      admin_note: note,
     });
-    showToast("Đã xử lý khiếu nại giờ.", "success");
+    closeModal("adminHourAppealModal");
+    showToast("Đã xử lý khiếu nại giờ thành công.", "success");
     await loadAdminAppeals();
   } catch (err) {
     showToast(extractApiError(err, "Không thể xử lý khiếu nại giờ."), "error");
   }
 }
 
-async function adminReviewAttendanceAppeal(appealId, decision) {
+function openAdminAttendanceAppealModal(appealId, mode = "DETAIL") {
+  const appeal = allAttendanceAppeals.find((a) => Number(a.id) === Number(appealId));
+  if (!appeal) {
+    showToast("Không tìm thấy dữ liệu khiếu nại điểm danh.", "error");
+    return;
+  }
+
+  const isPending = appeal.status === "ADMIN_PENDING";
+  const effectiveMode = isPending ? (mode === "REJECTED" ? "REJECTED" : "ACCEPTED") : "DETAIL";
+
+  document.getElementById("adminAttAppealId").value = String(appeal.id);
+  document.getElementById("adminAttAppealMode").value = effectiveMode;
+
+  const titleEl = document.getElementById("adminAttendanceAppealModalTitle");
+  if (titleEl) {
+    titleEl.textContent = !isPending
+      ? `Chi tiết khiếu nại điểm danh #${appeal.id}`
+      : effectiveMode === "REJECTED"
+        ? `Từ chối khiếu nại điểm danh #${appeal.id}`
+        : `Đối chiếu & Xử lý khiếu nại điểm danh #${appeal.id}`;
+  }
+
+  const detailBody = document.getElementById("adminAttAppealDetailBody");
+  const evidenceHtml = isSafeHttpUrl(appeal.evidence_url)
+    ? `<a href="${escapeHtml(appeal.evidence_url)}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm">Mở minh chứng ↗</a>`
+    : `<span style="color:var(--text-muted);">Không đính kèm link minh chứng</span>`;
+
+  if (detailBody) {
+    detailBody.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;">
+        <div style="padding:12px 14px;border-radius:12px;background:var(--surface-alt,#f8fafc);border:1px solid var(--border);">
+          <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;">1. Hồ sơ &amp; Dữ liệu điểm danh hiện tại</div>
+          <div style="display:grid;gap:6px;font-size:0.86rem;">
+            <div><strong>Tình nguyện viên:</strong> ${escapeHtml(appeal.user_name || `User #${appeal.user_id}`)} ${appeal.user_email ? `(${escapeHtml(appeal.user_email)})` : ""}</div>
+            <div><strong>Đơn đăng ký:</strong> #REG-${Number(appeal.registration_id)}</div>
+            <div><strong>Chiến dịch:</strong> ${escapeHtml(appeal.campaign_title || `Chiến dịch #${appeal.campaign_id || "—"}`)}</div>
+            <div><strong>Tổ chức:</strong> ${escapeHtml(appeal.organization_name || "—")}</div>
+            <div><strong>Thời gian chiến dịch:</strong> ${escapeHtml(safeFormatDateTime(appeal.campaign_start_time))} → ${escapeHtml(safeFormatDateTime(appeal.campaign_end_time))}</div>
+            <div><strong>Trạng thái điểm danh hiện tại:</strong> ${escapeHtml(appeal.current_attendance_status || "Chưa có bản ghi điểm danh")}</div>
+            <div><strong>Check-in đã ghi nhận:</strong> ${escapeHtml(safeFormatDateTime(appeal.current_check_in_at, "Chưa có"))}</div>
+            <div><strong>Check-out đã ghi nhận:</strong> ${escapeHtml(safeFormatDateTime(appeal.current_check_out_at, "Chưa có"))}</div>
+            ${appeal.review_note ? `<div style="color:#b91c1c;"><strong>Phản hồi của Organizer:</strong> ${escapeHtml(appeal.review_note)}</div>` : ""}
+          </div>
+        </div>
+
+        <div style="padding:12px 14px;border-radius:12px;background:#ffffff;border:1px solid var(--border);">
+          <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;">2. Nội dung khiếu nại &amp; SLA 48 giờ</div>
+          <div style="display:grid;gap:8px;font-size:0.86rem;">
+            <div><strong>Lý do khiếu nại gốc:</strong>
+              <div style="margin-top:4px;padding:8px 10px;border-radius:8px;background:var(--surface-alt,#f8fafc);border:1px solid var(--border);white-space:pre-line;">${escapeHtml(appeal.reason || "—")}</div>
+            </div>
+            <div><strong>Lý do khiếu nại lên Admin:</strong>
+              <div style="margin-top:4px;padding:8px 10px;border-radius:8px;background:var(--surface-alt,#f8fafc);border:1px solid var(--border);white-space:pre-line;">${escapeHtml(appeal.escalation_reason || "—")}</div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+              <strong>Minh chứng:</strong> ${evidenceHtml}
+            </div>
+            <div><strong>Chuyển lên Admin lúc:</strong> ${escapeHtml(safeFormatDateTime(appeal.escalated_at))}</div>
+            <div><strong>Hạn xử lý (SLA 48h):</strong> ${escapeHtml(safeFormatDateTime(appeal.sla_deadline))}</div>
+            ${!isPending ? `<div><strong>Phản hồi của Admin:</strong> ${escapeHtml(appeal.admin_note || "Đã xử lý")} (lúc ${escapeHtml(safeFormatDateTime(appeal.admin_resolved_at))})</div>` : ""}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  const formSection = document.getElementById("adminAttAppealFormSection");
+  const timeFields = document.getElementById("adminAttAppealTimeFields");
+  const timeHint = document.getElementById("adminAttAppealTimeHint");
+  const inInput = document.getElementById("adminAttAppealCheckInInput");
+  const outInput = document.getElementById("adminAttAppealCheckOutInput");
+  const noteInput = document.getElementById("adminAttAppealNoteInput");
+  const footer = document.getElementById("adminAttAppealModalFooter");
+
+  if (formSection) formSection.hidden = !isPending;
+  if (isPending) {
+    const showTimes = effectiveMode !== "REJECTED";
+    if (timeFields) timeFields.style.display = showTimes ? "grid" : "none";
+    if (timeHint) {
+      timeHint.hidden = !showTimes;
+      timeHint.textContent = `Lưu ý: Giờ Check-in/Check-out phải nằm trong khung thời gian diễn ra chiến dịch (${safeFormatDateTime(appeal.campaign_start_time)} – ${safeFormatDateTime(appeal.campaign_end_time)}). Các mốc đã ghi nhận qua mã hợp lệ được điền sẵn và khóa để bảo toàn dữ liệu.`;
+    }
+    if (inInput) {
+      inInput.value = toAdminDatetimeLocal(appeal.current_check_in_at || appeal.campaign_start_time);
+      inInput.disabled = Boolean(appeal.current_check_in_at);
+    }
+    if (outInput) {
+      outInput.value = toAdminDatetimeLocal(appeal.current_check_out_at || appeal.campaign_end_time);
+      outInput.disabled = Boolean(appeal.current_check_out_at);
+    }
+    if (noteInput) {
+      noteInput.value = effectiveMode === "REJECTED"
+        ? "Admin đã đối chiếu minh chứng và từ chối khiếu nại điểm danh."
+        : "Admin đã đối chiếu minh chứng và chấp nhận bổ sung thời gian điểm danh.";
+    }
+  }
+
+  if (footer) {
+    if (!isPending) {
+      footer.innerHTML = `<button type="button" class="btn btn-outline" onclick="closeModal('adminAttendanceAppealModal')">Đóng</button>`;
+    } else {
+      footer.innerHTML = `
+        <button type="button" class="btn btn-outline" onclick="closeModal('adminAttendanceAppealModal')">Hủy</button>
+        <button type="button" class="btn btn-danger" onclick="submitAdminAttendanceAppeal('REJECTED')">Từ chối khiếu nại</button>
+        <button type="button" class="btn btn-primary" onclick="submitAdminAttendanceAppeal('ACCEPTED')">✓ Chấp nhận &amp; Cập nhật điểm danh</button>
+      `;
+    }
+  }
+
+  openModal("adminAttendanceAppealModal");
+}
+
+function adminReviewAttendanceAppeal(appealId, decision) {
+  openAdminAttendanceAppealModal(appealId, decision);
+}
+
+async function submitAdminAttendanceAppeal(decisionOverride) {
+  const appealId = Number(document.getElementById("adminAttAppealId")?.value || 0);
+  const appeal = allAttendanceAppeals.find((a) => Number(a.id) === appealId);
+  const decision = decisionOverride || document.getElementById("adminAttAppealMode")?.value || "ACCEPTED";
+  const timeFields = document.getElementById("adminAttAppealTimeFields");
+  const timeHint = document.getElementById("adminAttAppealTimeHint");
+  const inInput = document.getElementById("adminAttAppealCheckInInput");
+  const outInput = document.getElementById("adminAttAppealCheckOutInput");
+  const noteInput = document.getElementById("adminAttAppealNoteInput");
+
+  if (!appealId) return;
+
   let checkIn = null;
   let checkOut = null;
   if (decision === "ACCEPTED") {
-    const inStr = window.prompt("Nhập giờ Check-in (YYYY-MM-DD HH:MM, bỏ trống nếu đã có):");
-    if (inStr === null) return;
-    const outStr = window.prompt("Nhập giờ Check-out (YYYY-MM-DD HH:MM, bỏ trống nếu đã có):");
-    if (outStr === null) return;
-    if (inStr.trim()) checkIn = inStr.trim().replace(" ", "T");
-    if (outStr.trim()) checkOut = outStr.trim().replace(" ", "T");
+    if (timeFields && timeFields.style.display === "none") {
+      timeFields.style.display = "grid";
+      if (timeHint) timeHint.hidden = false;
+      inInput?.focus();
+      return;
+    }
+    const inVal = (inInput?.value || "").trim();
+    const outVal = (outInput?.value || "").trim();
+    if (!appeal?.current_check_in_at && inVal) {
+      checkIn = inVal.length === 16 ? `${inVal}:00` : inVal;
+    }
+    if (!appeal?.current_check_out_at && outVal) {
+      checkOut = outVal.length === 16 ? `${outVal}:00` : outVal;
+    }
+    if (!appeal?.current_check_in_at && !checkIn) {
+      showToast("Vui lòng nhập giờ Check-in còn thiếu.", "warning");
+      inInput?.focus();
+      return;
+    }
+    if (!appeal?.current_check_out_at && !checkOut) {
+      showToast("Vui lòng nhập giờ Check-out còn thiếu.", "warning");
+      outInput?.focus();
+      return;
+    }
   }
-  const note = window.prompt("Nhập ghi chú xử lý của Admin (tối thiểu 3 ký tự):", decision === "ACCEPTED" ? "Admin chấp nhận minh chứng điểm danh" : "Admin từ chối khiếu nại điểm danh");
-  if (note === null || note.trim().length < 3) {
+
+  const note = (noteInput?.value || "").trim();
+  if (note.length < 3) {
     showToast("Ghi chú Admin cần tối thiểu 3 ký tự.", "warning");
+    noteInput?.focus();
     return;
   }
+
   try {
     await api.patch(`/attendance-appeals/${appealId}/admin-review`, {
       decision,
-      admin_note: note.trim(),
+      admin_note: note,
       check_in_at: checkIn,
       check_out_at: checkOut,
     });
-    showToast("Đã xử lý khiếu nại điểm danh.", "success");
+    closeModal("adminAttendanceAppealModal");
+    showToast("Đã xử lý khiếu nại điểm danh thành công.", "success");
     await loadAdminAppeals();
   } catch (err) {
     showToast(extractApiError(err, "Không thể xử lý khiếu nại điểm danh."), "error");

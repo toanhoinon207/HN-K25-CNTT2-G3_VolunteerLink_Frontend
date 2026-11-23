@@ -258,7 +258,11 @@ function renderCampaignDetail(campaign, options = {}) {
 
   const detailBanner = document.getElementById("detail-banner");
   if (detailBanner) {
-    detailBanner.src = campaign.image_url || Layout.DEFAULT_CAMPAIGN_IMAGE;
+    const resolvedBannerUrl =
+      typeof resolveBackendAssetUrl === "function"
+        ? resolveBackendAssetUrl(campaign.image_url) || campaign.image_url
+        : campaign.image_url;
+    detailBanner.src = resolvedBannerUrl || Layout.DEFAULT_CAMPAIGN_IMAGE;
     detailBanner.alt = campaign.title || "Ảnh chiến dịch tình nguyện";
     Layout.applyFallbackImage(detailBanner);
   }

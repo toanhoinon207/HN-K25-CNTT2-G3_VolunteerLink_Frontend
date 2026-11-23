@@ -1,4 +1,20 @@
 
+function redirectRegisterIfAuthenticated() {
+    if (typeof Auth !== "undefined" && Auth.isLoggedIn()) {
+        const cachedUser = Auth.getUser();
+        if (cachedUser && cachedUser.role) {
+            window.location.replace(Auth.getDashboard(cachedUser.role));
+            return true;
+        }
+    }
+    return false;
+}
+
+redirectRegisterIfAuthenticated();
+window.addEventListener("pageshow", () => {
+    redirectRegisterIfAuthenticated();
+});
+
 const registerForm = document.getElementById("registerForm");
 
 registerForm.addEventListener("submit", async function (event) {
@@ -87,7 +103,7 @@ registerForm.addEventListener("submit", async function (event) {
         showToast("Đăng ký tài khoản Tình nguyện viên thành công!", "success");
 
         setTimeout(() => {
-            window.location.href = "login.html";
+            window.location.replace("login.html");
         }, 1200);
 
     } catch (error) {
