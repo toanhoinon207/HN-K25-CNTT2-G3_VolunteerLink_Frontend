@@ -792,8 +792,32 @@ textarea.ud-control {
   align-items: start;
 }
 
-#tab-attendance .ud-two-col {
+#tab-attendance .ud-two-col,
+#tab-profile .ud-two-col {
   align-items: stretch;
+}
+
+#tab-profile .ud-two-col > .ud-card {
+  margin-block-end: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+#tab-profile .ud-two-col > .ud-card > .ud-card-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+#tab-profile .ud-two-col > .ud-card > .ud-card-body > form {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+#tab-profile .ud-two-col > .ud-card > .ud-card-body > form > .btn {
+  margin-block-start: auto;
+  align-self: flex-start;
 }
 
 #tab-attendance .ud-two-col > .ud-card:first-child {
@@ -808,7 +832,12 @@ textarea.ud-control {
 #tab-attendance .table-wrapper {
   flex: 1 1 auto;
   min-block-size: 0;
-  max-block-size: 272px;
+  max-block-size: 480px;
+}
+
+#tab-attendance .ud-table thead th,
+#tab-attendance .ud-table tbody td {
+  padding-inline: 14px;
 }
 
 @media (max-width: 1024px) {
@@ -1039,27 +1068,43 @@ textarea.ud-control {
 }
 
 .btn-action-primary {
-  background: var(--primary);
-  border-color: var(--primary);
+  background: #16A34A;
+  border-color: #16A34A;
   color: #FFFFFF;
 }
 
 .btn-action-primary:hover {
-  background: var(--primary-hover);
-  border-color: var(--primary-hover);
+  background: #15803D;
+  border-color: #15803D;
   color: #FFFFFF;
 }
 
-.btn-action-danger {
-  background: var(--danger-bg);
-  border-color: var(--danger-border);
-  color: var(--danger);
+.btn-action-danger,
+.btn.btn-action-danger,
+.btn-outline.btn-action-danger {
+  background: #EF4444;
+  border-color: #EF4444;
+  color: #FFFFFF;
 }
 
-.btn-action-danger:hover {
-  background: #FEE2E2;
-  border-color: #FCA5A5;
-  color: var(--danger);
+.btn-action-danger:hover,
+.btn.btn-action-danger:hover,
+.btn-outline.btn-action-danger:hover {
+  background: #DC2626;
+  border-color: #DC2626;
+  color: #FFFFFF;
+}
+
+.btn-action-neutral {
+  background: #F1F5F9;
+  border-color: #CBD5E1;
+  color: #475569;
+}
+
+.btn-action-neutral:hover {
+  background: #E2E8F0;
+  border-color: #94A3B8;
+  color: #0F172A;
 }
 
 .btn-action-blue {

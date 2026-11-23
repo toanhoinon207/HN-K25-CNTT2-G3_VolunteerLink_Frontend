@@ -776,7 +776,11 @@ function updateCampaignImagePreview(url) {
   const placeholder = document.getElementById("newCampCoverPlaceholder");
   if (!img) return;
   const trimmed = (url || "").trim();
-  if (!trimmed) {
+  const resolved =
+    typeof resolveBackendAssetUrl === "function"
+      ? resolveBackendAssetUrl(trimmed) || trimmed
+      : trimmed;
+  if (!resolved) {
     img.hidden = true;
     img.removeAttribute("src");
     if (placeholder) placeholder.hidden = false;
@@ -790,7 +794,7 @@ function updateCampaignImagePreview(url) {
     img.hidden = true;
     if (placeholder) placeholder.hidden = false;
   };
-  img.src = trimmed;
+  img.src = resolved;
 }
 
 function setupCampaignImagePreview() {
@@ -912,8 +916,12 @@ function populateCampaignReadView(camp) {
 
   const coverImg = document.getElementById("campReadCoverImg");
   if (coverImg) {
-    if (camp.image_url) {
-      coverImg.src = camp.image_url;
+    const resolvedCoverUrl =
+      typeof resolveBackendAssetUrl === "function"
+        ? resolveBackendAssetUrl(camp.image_url) || camp.image_url
+        : camp.image_url;
+    if (resolvedCoverUrl) {
+      coverImg.src = resolvedCoverUrl;
       coverImg.alt = camp.title || "Ảnh chiến dịch";
       coverImg.hidden = false;
       coverImg.onerror = () => { coverImg.hidden = true; };
@@ -1324,48 +1332,24 @@ async function restoreAttendanceCode() {
   projector.style.display = "none";
   const codeEl = document.getElementById("liveDisplayCode");
   if (codeEl) codeEl.textContent = "------";
-  let history = document.getElementById("attendanceCodeAuditHistory");
-  if (!history) {
-    history = document.createElement("div");
-    history.id = "attendanceCodeAuditHistory";
-    history.style.cssText = "margin: 12px 0; padding: 12px; border:1px solid #cbd5e1; border-radius:8px";
-    projector.parentElement.appendChild(history);
-  }
-  if (!campaignId) { history.textContent = "Hãy chọn chiến dịch để xem lịch sử mã."; return; }
+  const oldHistoryEl = document.getElementById("attendanceCodeAuditHistory");
+  if (oldHistoryEl) oldHistoryEl.remove();
+  if (!campaignId) return;
+
   // Prevent a slower response from overwriting a newly selected campaign.
   const requestId = String(campaignId);
-  history.textContent = "Đang tải mã điểm danh từ máy chủ...";
   try {
-    const [current, historyResponse] = await Promise.all([
-      api.get(`/attendances/campaigns/${campaignId}/code/current`),
-      api.get(`/attendances/campaigns/${campaignId}/code/history`),
-    ]);
+    const current = await api.get(`/attendances/campaigns/${campaignId}/code/current`);
     if (String(document.getElementById("codeGenCampaignSelect")?.value) !== requestId) return;
     const code = current.data;
-    const rows = Array.isArray(historyResponse.data) ? historyResponse.data : [];
     if (code?.code) {
       const when = String(code.expires_at);
       const expiry = new Date(/(?:Z|[+-]\d{2}:?\d{2})$/.test(when) ? when : `${when}+07:00`);
       const title = getOrgCampaigns().find(c => c.id === campaignId)?.title || `Chiến dịch #${campaignId}`;
       displayLiveCode(code.code, expiry, `${title} — ${code.code_type}`, code.code_type);
     }
-    history.innerHTML = "";
-    const heading = document.createElement("strong");
-    heading.textContent = `Lịch sử cấp mã (${rows.length} lần gần nhất)`;
-    history.appendChild(heading);
-    if (!rows.length) {
-      const empty = document.createElement("p");
-      empty.textContent = "Chưa từng phát mã điểm danh.";
-      history.appendChild(empty);
-    }
-    for (const item of rows) {
-      const line = document.createElement("p");
-      line.style.cssText = "margin: 8px 0; font-size: 13px; overflow-wrap:anywhere";
-      line.textContent = `#${item.id} | ${item.code_type} | ${item.code} | Cấp: ${item.issued_at} | Hết hạn: ${item.expires_at} | ${item.is_active ? "ĐANG HIỆU LỰC" : item.is_current ? "ĐÃ HẾT HẠN" : "MÃ CŨ"} | Người cấp ID: ${item.issued_by}`;
-      history.appendChild(line);
-    }
-  } catch (error) {
-    history.textContent = Layout.extractApiErrorMessage(error, "Không thể tải mã/lịch sử điểm danh từ Backend.");
+  } catch {
+    // Không hiển thị mã nếu chiến dịch chưa có mã đang hiệu lực
   }
 }
 
@@ -1460,10 +1444,14 @@ async function renderLiveAttendanceList(manual = false) {
       }
 
       const actionsHtml = !a.attendance_id
-        ? `<button type="button" class="btn btn-primary btn-sm" onclick="manualMarkAttendance(${campaignId}, ${Number(a.registration_id)}, 'PRESENT')">Có mặt</button>
-           <button type="button" class="btn btn-outline btn-sm" style="color:#b91c1c;border-color:#fecaca;" onclick="manualMarkAttendance(${campaignId}, ${Number(a.registration_id)}, 'ABSENT')">Vắng</button>`
-        : `<button type="button" class="btn btn-outline btn-sm" onclick="promptEditAttendanceTime(${Number(a.attendance_id)})">Sửa giờ</button>
-           <button type="button" class="btn btn-outline btn-sm" onclick="toggleAttendanceStatus(${Number(a.attendance_id)}, '${a.status === "PRESENT" ? "ABSENT" : "PRESENT"}')">${a.status === "PRESENT" ? "Đánh vắng" : "Đánh có mặt"}</button>`;
+        ? `<div style="display:inline-flex;gap:6px;justify-content:flex-end;">
+             <button type="button" class="btn btn-primary btn-sm" onclick="manualMarkAttendance(${campaignId}, ${Number(a.registration_id)}, 'PRESENT')">Có mặt</button>
+             <button type="button" class="btn btn-danger btn-sm" onclick="manualMarkAttendance(${campaignId}, ${Number(a.registration_id)}, 'ABSENT')">Vắng</button>
+           </div>`
+        : `<div style="display:inline-flex;gap:6px;justify-content:flex-end;">
+             <button type="button" class="btn btn-outline btn-sm" onclick="promptEditAttendanceTime(${Number(a.attendance_id)})">Sửa giờ</button>
+             <button type="button" class="btn ${a.status === "PRESENT" ? "btn-danger" : "btn-primary"} btn-sm" onclick="toggleAttendanceStatus(${Number(a.attendance_id)}, '${a.status === "PRESENT" ? "ABSENT" : "PRESENT"}')">${a.status === "PRESENT" ? "Đánh vắng" : "Đánh có mặt"}</button>
+           </div>`;
 
       return `
         <tr>
@@ -1553,16 +1541,30 @@ document.addEventListener("DOMContentLoaded", () => {
     fileInput.addEventListener("change", async () => {
       const file = fileInput.files?.[0];
       if (!file) return;
+      const allowed = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+      const mime = (file.type || "").toLowerCase();
+      const hasAllowedExt = /\.(jpe?g|png|webp)$/i.test(file.name || "");
+      if (!allowed.includes(mime) && !hasAllowedExt) {
+        showToast("Chỉ hỗ trợ ảnh định dạng JPG, PNG hoặc WEBP.", "warning");
+        fileInput.value = "";
+        return;
+      }
+      if (file.size > 2 * 1024 * 1024) {
+        showToast("Kích thước ảnh tối đa là 2MB.", "warning");
+        fileInput.value = "";
+        return;
+      }
       fileBtn.disabled = true;
       fileBtn.textContent = "Đang tải...";
       try {
         const formData = new FormData();
         formData.append("file", file);
-        const res = await api.post("/campaigns/upload-image", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
+        const res = await api.post("/campaigns/upload-image", formData);
         const uploadedUrl = res.data?.image_url || "";
-        if (urlInput) urlInput.value = uploadedUrl;
+        if (urlInput) {
+          urlInput.value = uploadedUrl;
+          urlInput.dispatchEvent(new Event("input", { bubbles: true }));
+        }
         if (typeof updateCampaignImagePreview === "function") {
           updateCampaignImagePreview(uploadedUrl);
         }
@@ -1989,7 +1991,7 @@ function openRegistrationDetailModal(regId) {
     footer.innerHTML = reg.status === "PENDING"
       ? `
         <button type="button" class="btn btn-outline" onclick="closeModal('registrationDetailModal')">Đóng</button>
-        <button type="button" class="btn" style="background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca;" onclick="openRejectRegistrationModal(${reg.id}, ${reg.campaign_id})">Từ chối</button>
+        <button type="button" class="btn btn-danger" onclick="openRejectRegistrationModal(${reg.id}, ${reg.campaign_id})">Từ chối</button>
         <button type="button" class="btn btn-primary" onclick="approveVolunteerRegistration(${reg.id}, ${reg.campaign_id})">✓ Duyệt đơn</button>
       `
       : `<button type="button" class="btn btn-outline" onclick="closeModal('registrationDetailModal')">Đóng</button>`;
@@ -2146,9 +2148,22 @@ async function loadCampaignWaitlist(manual = false) {
 }
 
 // ================= TAB 5: CẤP CHỨNG CHỈ & KHIẾU NẠI GIỜ =================
-async function renderCertificatesAndClaims() {
+async function renderCertificatesAndClaims(manual = false, triggerBtn = null) {
   const orgClaimsTbody = document.getElementById("orgClaimsTbody");
   const orgIssuedCertsTbody = document.getElementById("orgIssuedCertsTbody");
+  const claimsBtn = document.getElementById("refreshOrgClaimsBtn");
+  const certsBtn = document.getElementById("refreshOrgIssuedCertsBtn");
+  const startedAt = Date.now();
+
+  if (manual) {
+    if (triggerBtn) setRefreshSpin(triggerBtn, true);
+    else {
+      setRefreshSpin(claimsBtn, true);
+      setRefreshSpin(certsBtn, true);
+    }
+    if (orgClaimsTbody) orgClaimsTbody.classList.add("is-refreshing");
+    if (orgIssuedCertsTbody) orgIssuedCertsTbody.classList.add("is-refreshing");
+  }
 
   // Hour claims always come from the server; local fallbacks must not fake approvals.
   let claims = [];
@@ -2158,7 +2173,11 @@ async function renderCertificatesAndClaims() {
   } catch (err) {
     if (orgClaimsTbody) {
       orgClaimsTbody.innerHTML = `<tr><td colspan="4">${escapeHtml(Layout.extractApiErrorMessage(err, "Không thể tải yêu cầu giờ."))}</td></tr>`;
+      orgClaimsTbody.classList.remove("is-refreshing");
     }
+    if (orgIssuedCertsTbody) orgIssuedCertsTbody.classList.remove("is-refreshing");
+    setRefreshSpin(triggerBtn || claimsBtn, false);
+    setRefreshSpin(certsBtn, false);
     return;
   }
 
@@ -2203,8 +2222,13 @@ async function renderCertificatesAndClaims() {
     let certs;
     try {
       certs = (await api.get("/certificates/issued")).data;
+      if (manual) await waitMinSpin(startedAt);
     } catch {
       orgIssuedCertsTbody.innerHTML = '<tr><td colspan="4">Không thể tải chứng nhận.</td></tr>';
+      if (orgClaimsTbody) orgClaimsTbody.classList.remove("is-refreshing");
+      orgIssuedCertsTbody.classList.remove("is-refreshing");
+      setRefreshSpin(triggerBtn || claimsBtn, false);
+      setRefreshSpin(certsBtn, false);
       return;
     }
     if (certs.length === 0) {
@@ -2220,6 +2244,12 @@ async function renderCertificatesAndClaims() {
       `).join("");
     }
   }
+
+  if (orgClaimsTbody) orgClaimsTbody.classList.remove("is-refreshing");
+  if (orgIssuedCertsTbody) orgIssuedCertsTbody.classList.remove("is-refreshing");
+  setRefreshSpin(triggerBtn || claimsBtn, false);
+  setRefreshSpin(certsBtn, false);
+  if (manual) showToast("Đã cập nhật dữ liệu chứng chỉ và yêu cầu giờ.", "success");
 }
 
 async function verifyHourClaim(claimId, approvedHours) {
@@ -2483,6 +2513,52 @@ async function saveOrgProfile() {
   showToast("Đã lưu thông tin hồ sơ tổ chức!", "success");
 }
 
+async function submitOrgChangePassword() {
+  const oldPassword = document.getElementById("orgOldPassword")?.value || "";
+  const newPassword = document.getElementById("orgNewPassword")?.value || "";
+  const confirmPassword = document.getElementById("orgConfirmPassword")?.value || "";
+  const btn = document.getElementById("btnChangeOrgPassword");
+
+  if (!oldPassword || !newPassword || !confirmPassword) {
+    showToast("Vui lòng nhập đầy đủ mật khẩu hiện tại và mật khẩu mới.", "warning");
+    return;
+  }
+  if (newPassword.length < 8) {
+    showToast("Mật khẩu mới phải có ít nhất 8 ký tự.", "warning");
+    document.getElementById("orgNewPassword")?.focus();
+    return;
+  }
+  if (newPassword === oldPassword) {
+    showToast("Mật khẩu mới phải khác mật khẩu hiện tại.", "warning");
+    document.getElementById("orgNewPassword")?.focus();
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    showToast("Xác nhận mật khẩu mới không khớp.", "warning");
+    document.getElementById("orgConfirmPassword")?.focus();
+    return;
+  }
+
+  if (btn) btn.disabled = true;
+  try {
+    await api.post("/profile/change-password", {
+      old_password: oldPassword,
+      new_password: newPassword,
+    });
+    showToast("Đổi mật khẩu thành công! Vui lòng đăng nhập lại với mật khẩu mới.", "success");
+    document.getElementById("orgOldPassword").value = "";
+    document.getElementById("orgNewPassword").value = "";
+    document.getElementById("orgConfirmPassword").value = "";
+    setTimeout(() => {
+      Auth.clearSession();
+      window.location.replace("login.html");
+    }, 1200);
+  } catch (err) {
+    showToast(Layout.extractApiErrorMessage(err, "Không thể đổi mật khẩu."), "error");
+    if (btn) btn.disabled = false;
+  }
+}
+
 // Modal helpers (kế thừa VLModal từ js/utils.js, giữ hook reset cho createCampaignModal)
 if (typeof VLModal !== "undefined") {
   VLModal.onClose("createCampaignModal", () => {
@@ -2533,7 +2609,7 @@ async function loadOrganizerAttendanceAppeals(manual = false) {
           ${a.status === "PENDING" ? `
             <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px;">
               <button type="button" class="btn btn-primary btn-sm" onclick="reviewAttendanceAppeal(${Number(a.id)}, 'ACCEPTED')">Chấp nhận</button>
-              <button type="button" class="btn btn-outline btn-sm" onclick="reviewAttendanceAppeal(${Number(a.id)}, 'REJECTED')">Từ chối</button>
+              <button type="button" class="btn btn-danger btn-sm" onclick="reviewAttendanceAppeal(${Number(a.id)}, 'REJECTED')">Từ chối</button>
             </div>` : ""}
         </div>`;
     }).join("")}</div>`;

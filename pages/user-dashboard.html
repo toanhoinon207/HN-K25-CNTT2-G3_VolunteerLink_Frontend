@@ -281,11 +281,16 @@
       <div class="ud-card">
         <div class="ud-card-header wl-card-header-wrap">
           <h2 id="userWaitlistTableTitle">Danh sách hàng chờ &amp; Lịch sử</h2>
-          <div class="wl-filter-chips" role="group" aria-label="Lọc trạng thái danh sách chờ">
-            <button type="button" class="wl-filter-chip active" data-wl-filter="ALL">Tất cả</button>
-            <button type="button" class="wl-filter-chip" data-wl-filter="INVITED">Cần phản hồi</button>
-            <button type="button" class="wl-filter-chip" data-wl-filter="WAITING">Đang chờ</button>
-            <button type="button" class="wl-filter-chip" data-wl-filter="HISTORY">Lịch sử</button>
+          <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <div class="wl-filter-chips" role="group" aria-label="Lọc trạng thái danh sách chờ">
+              <button type="button" class="wl-filter-chip active" data-wl-filter="ALL">Tất cả</button>
+              <button type="button" class="wl-filter-chip" data-wl-filter="INVITED">Cần phản hồi</button>
+              <button type="button" class="wl-filter-chip" data-wl-filter="WAITING">Đang chờ</button>
+              <button type="button" class="wl-filter-chip" data-wl-filter="HISTORY">Lịch sử</button>
+            </div>
+            <button type="button" class="btn btn-outline btn-sm org-icon-btn" id="refreshWaitlistTableBtn" onclick="loadMyWaitlist(true, this)" aria-label="Làm mới bảng danh sách chờ" title="Làm mới">
+              <svg class="svg-icon" aria-hidden="true" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            </button>
           </div>
         </div>
         <div class="table-wrapper" tabindex="0" role="region" aria-labelledby="userWaitlistTableTitle">
@@ -355,6 +360,9 @@
         <div class="ud-card">
           <div class="ud-card-header">
             <h2 id="attendanceHistoryTitle">Lịch sử điểm danh</h2>
+            <button type="button" id="refreshAttendanceHistoryBtn" class="btn btn-outline btn-sm org-icon-btn" onclick="loadMyAttendanceHistory(true)" aria-label="Làm mới lịch sử điểm danh" title="Làm mới">
+              <svg class="svg-icon" aria-hidden="true" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            </button>
           </div>
           <div class="table-wrapper" tabindex="0" role="region" aria-labelledby="attendanceHistoryTitle">
             <table class="ud-table">
@@ -515,21 +523,48 @@
           </div>
         </div>
 
-        <div class="ud-card">
-          <div class="ud-card-header">
-            <h2>Kỹ năng &amp; Khu vực ưu tiên</h2>
+        <div style="display: flex; flex-direction: column; gap: 20px;">
+          <div class="ud-card" style="margin-block-end: 0;">
+            <div class="ud-card-header">
+              <h2>Kỹ năng &amp; Khu vực ưu tiên</h2>
+            </div>
+            <div class="ud-card-body">
+              <div class="ud-field">
+                <label for="profSkills">Kỹ năng nổi bật (cách nhau bởi dấu phẩy)</label>
+                <input type="text" id="profSkills" class="ud-control" placeholder="Ví dụ: Sơ cứu y tế, Tiếng Anh, Điều phối sự kiện">
+                <div class="ud-skill-tags" id="profSkillTagsPreview"></div>
+              </div>
+              <div class="ud-field">
+                <label for="profPreferredArea">Khu vực ưu tiên</label>
+                <input type="text" id="profPreferredArea" class="ud-control" placeholder="Ví dụ: Hà Nội, TP.HCM">
+              </div>
+              <button type="button" class="btn btn-outline" id="btnSaveVolunteerSkills" onclick="saveVolunteerSkills()">Cập nhật kỹ năng</button>
+            </div>
           </div>
-          <div class="ud-card-body">
-            <div class="ud-field">
-              <label for="profSkills">Kỹ năng nổi bật (cách nhau bởi dấu phẩy)</label>
-              <input type="text" id="profSkills" class="ud-control" placeholder="Ví dụ: Sơ cứu y tế, Tiếng Anh, Điều phối sự kiện">
-              <div class="ud-skill-tags" id="profSkillTagsPreview"></div>
+
+          <div class="ud-card" style="margin-block-end: 0;">
+            <div class="ud-card-header">
+              <h2>Đổi mật khẩu</h2>
             </div>
-            <div class="ud-field">
-              <label for="profPreferredArea">Khu vực ưu tiên</label>
-              <input type="text" id="profPreferredArea" class="ud-control" placeholder="Ví dụ: Hà Nội, TP.HCM">
+            <div class="ud-card-body">
+              <form onsubmit="return false;">
+                <div class="ud-field">
+                  <label for="profOldPassword">Mật khẩu hiện tại</label>
+                  <input type="password" id="profOldPassword" class="ud-control" autocomplete="current-password" placeholder="Nhập mật khẩu đang sử dụng">
+                </div>
+                <div class="ud-form-grid">
+                  <div class="ud-field">
+                    <label for="profNewPassword">Mật khẩu mới (tối thiểu 8 ký tự)</label>
+                    <input type="password" id="profNewPassword" class="ud-control" autocomplete="new-password" minlength="8" placeholder="Nhập mật khẩu mới">
+                  </div>
+                  <div class="ud-field">
+                    <label for="profConfirmPassword">Xác nhận mật khẩu mới</label>
+                    <input type="password" id="profConfirmPassword" class="ud-control" autocomplete="new-password" minlength="8" placeholder="Nhập lại mật khẩu mới">
+                  </div>
+                </div>
+                <button type="button" class="btn btn-primary" id="btnChangeUserPassword" onclick="submitUserChangePassword()">Đổi mật khẩu</button>
+              </form>
             </div>
-            <button type="button" class="btn btn-outline" id="btnSaveVolunteerSkills" onclick="saveVolunteerSkills()">Cập nhật kỹ năng</button>
           </div>
         </div>
       </div>
@@ -636,6 +671,9 @@
       </div>
       <div class="dash-modal-body">
         <input type="hidden" id="hourAppealClaimId">
+        <p style="margin: 0 0 12px; font-size: 0.86rem; color: var(--text-muted);">
+          Mọi khiếu nại gửi lên Quản trị viên sẽ được đối chiếu và xử lý trong vòng <strong>48 giờ</strong>.
+        </p>
         <div class="ud-field" style="margin-block-end: 0;">
           <label for="hourAppealReasonInput">Lý do khiếu nại <span aria-hidden="true">*</span></label>
           <textarea id="hourAppealReasonInput" class="ud-control" rows="3" placeholder="Nêu rõ lý do và thông tin đối chiếu gửi quản trị viên..."></textarea>
@@ -644,6 +682,30 @@
       <div class="dash-modal-footer">
         <button type="button" class="btn btn-outline" onclick="closeModal('hourAppealModal')">Hủy</button>
         <button type="button" class="btn btn-primary" id="confirmHourAppealBtn" onclick="submitHourClaimAppeal()">Gửi khiếu nại</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: KHIẾU NẠI ĐIỂM DANH LÊN ADMIN -->
+  <div class="dash-modal-backdrop" id="escalateAttendanceAppealModal" role="dialog" aria-modal="true" aria-labelledby="escalateAttAppealTitle">
+    <div class="dash-modal">
+      <div class="dash-modal-header">
+        <h3 id="escalateAttAppealTitle">Chuyển khiếu nại điểm danh lên Quản trị viên</h3>
+        <button type="button" class="dash-modal-close" aria-label="Đóng hộp thoại" onclick="closeModal('escalateAttendanceAppealModal')">&times;</button>
+      </div>
+      <div class="dash-modal-body">
+        <input type="hidden" id="escalateAttAppealId">
+        <p style="margin: 0 0 12px; font-size: 0.86rem; color: var(--text-muted);">
+          Mọi khiếu nại chuyển lên Quản trị viên sẽ được đối chiếu và xử lý trong vòng <strong>48 giờ</strong>.
+        </p>
+        <div class="ud-field" style="margin-block-end: 0;">
+          <label for="escalateAttAppealReasonInput">Lý do khiếu nại lên Admin (tối thiểu 10 ký tự) <span aria-hidden="true">*</span></label>
+          <textarea id="escalateAttAppealReasonInput" class="ud-control" rows="3" placeholder="Nêu rõ lý do và thông tin đối chiếu gửi Quản trị viên..."></textarea>
+        </div>
+      </div>
+      <div class="dash-modal-footer">
+        <button type="button" class="btn btn-outline" onclick="closeModal('escalateAttendanceAppealModal')">Hủy</button>
+        <button type="button" class="btn btn-primary" id="confirmEscalateAttAppealBtn" onclick="submitEscalateAttendanceAppeal()">Gửi lên Admin</button>
       </div>
     </div>
   </div>

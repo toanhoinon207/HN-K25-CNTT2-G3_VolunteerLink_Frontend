@@ -243,21 +243,19 @@ function setupMyWaitlist() {
   }, 1000);
 }
 
-async function loadMyWaitlist(manual = false) {
+async function loadMyWaitlist(manual = false, triggerBtn = null) {
   const tbody = document.getElementById("myWaitlistTbody");
-  const refreshBtn = document.getElementById("refreshMyWaitlistBtn");
+  const refreshBtn = triggerBtn || document.getElementById("refreshMyWaitlistBtn");
+  const tableRefreshBtn = document.getElementById("refreshWaitlistTableBtn");
   const hasRows = tbody && tbody.children.length > 0 && !tbody.querySelector("td[colspan]");
   const startedAt = Date.now();
   if (tbody && hasRows) tbody.classList.add("is-refreshing");
-  if (refreshBtn) {
-    refreshBtn.classList.add("is-spinning");
-    refreshBtn.disabled = true;
-  }
+  if (refreshBtn) setRefreshSpin(refreshBtn, true);
+  if (tableRefreshBtn && tableRefreshBtn !== refreshBtn) setRefreshSpin(tableRefreshBtn, true);
   try {
     const response = await api.get("/waitlist/mine");
     if (manual) {
-      const waitMs = Math.max(0, 450 - (Date.now() - startedAt));
-      if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs));
+      await waitMinSpin(startedAt);
     }
     myWaitlistEntries = Array.isArray(response.data) ? response.data : [];
     renderMyWaitlist();
@@ -270,10 +268,8 @@ async function loadMyWaitlist(manual = false) {
     if (tbody) tbody.innerHTML = `<tr><td colspan="5">${escapeHtml(extractApiError(error, "Không tải được danh sách chờ."))}</td></tr>`;
   } finally {
     if (tbody) tbody.classList.remove("is-refreshing");
-    if (refreshBtn) {
-      refreshBtn.classList.remove("is-spinning");
-      refreshBtn.disabled = false;
-    }
+    if (refreshBtn) setRefreshSpin(refreshBtn, false);
+    if (tableRefreshBtn) setRefreshSpin(tableRefreshBtn, false);
   }
 }
 
@@ -287,7 +283,7 @@ function renderMyWaitlist() {
   set("wlStatAccepted", accepted.length);
   set("myWaitlistCountBadge", active.length + waiting.length);
   const title = (e) => escapeHtml(e.campaign_title || `Chiến dịch #${e.campaign_id}`);
-  const actions = (e) => `<button type="button" class="btn btn-primary btn-sm" data-wl-entry="${e.id}" data-wl-response="ACCEPTED" ${isActiveWaitlistInvite(e) && !waitlistPendingAction ? "" : "disabled"}>Chấp nhận</button> <button type="button" class="btn btn-outline btn-sm" data-wl-entry="${e.id}" data-wl-response="DECLINED" ${isActiveWaitlistInvite(e) && !waitlistPendingAction ? "" : "disabled"}>Từ chối</button>`;
+  const actions = (e) => `<div style="display:inline-flex;align-items:center;gap:8px;justify-content:flex-end;"><button type="button" class="btn btn-primary btn-sm" data-wl-entry="${e.id}" data-wl-response="ACCEPTED" ${isActiveWaitlistInvite(e) && !waitlistPendingAction ? "" : "disabled"}>Chấp nhận</button><button type="button" class="btn btn-danger btn-sm" data-wl-entry="${e.id}" data-wl-response="DECLINED" ${isActiveWaitlistInvite(e) && !waitlistPendingAction ? "" : "disabled"}>Từ chối</button></div>`;
   const invites = document.getElementById("userWaitlistInviteSection");
   if (invites) invites.innerHTML = active.length ? active.map((e) => `
     <article class="ud-card wl-invite-card">
@@ -309,10 +305,15 @@ function renderMyWaitlist() {
     const deadline = e.status === "INVITED"
       ? `<strong data-wl-countdown="${e.id}">${waitlistRemaining(e)}</strong><div class="td-subtitle">${escapeHtml(safeFormatDateTime(e.response_deadline))}</div>`
       : (e.status === "WAITING" ? "Chờ đến lượt" : escapeHtml(safeFormatDateTime(e.responded_at)));
+    const rowActionHtml = e.status === "INVITED"
+      ? actions(e)
+      : e.status === "WAITING"
+        ? `<button type="button" class="btn btn-neutral btn-sm" data-wl-leave="${e.campaign_id}">Rời hàng chờ</button>`
+        : "—";
     return `<tr><td><span class="wl-position-badge">${escapeHtml(position)}</span></td>
       <td><div class="td-title">${title(e)}</div><div class="td-subtitle">Vào hàng chờ: ${escapeHtml(safeFormatDateTime(e.created_at))}</div></td>
       <td><span class="status-pill ${cls}">${escapeHtml(e.status === "INVITED" && !isActiveWaitlistInvite(e) ? "Đã quá hạn" : label)}</span></td>
-      <td>${deadline}</td><td>${e.status === "INVITED" ? actions(e) : ""}${["WAITING", "INVITED"].includes(e.status) ? `<button type="button" class="btn btn-outline btn-sm" data-wl-leave="${e.campaign_id}">Rời hàng chờ</button>` : "—"}</td></tr>`;
+      <td>${deadline}</td><td>${rowActionHtml}</td></tr>`;
   }).join("") : `<tr><td colspan="5" style="text-align:center;padding:28px;">Không có mục nào phù hợp.</td></tr>`;
 }
 
@@ -410,8 +411,10 @@ async function loadMyRegistrations(manual = false) {
         let actionHtml = `<a href="campaign_detail.html?id=${encodeURIComponent(reg.campaign_id)}" class="btn-action">Chi tiết</a>`;
         if (reg.status === "APPROVED") {
           actionHtml = `<button type="button" class="btn-action btn-action-primary" onclick="goToAttendance(${Number(reg.campaign_id)})">Điểm danh</button>`;
-        } else if (reg.status === "PENDING" || reg.status === "WAITLISTED") {
-          actionHtml = `<button type="button" class="btn-action btn-action-danger" onclick="cancelMyRegistration(${Number(reg.id)})">${reg.status === "WAITLISTED" ? "Rời hàng chờ" : "Hủy đơn"}</button>`;
+        } else if (reg.status === "WAITLISTED") {
+          actionHtml = `<button type="button" class="btn-action btn-action-neutral" onclick="cancelMyRegistration(${Number(reg.id)})">Rời hàng chờ</button>`;
+        } else if (reg.status === "PENDING") {
+          actionHtml = `<button type="button" class="btn-action btn-action-danger" onclick="cancelMyRegistration(${Number(reg.id)})">Hủy đơn</button>`;
         }
 
         return `
@@ -560,19 +563,23 @@ async function submitAttendance(action) {
   }
 }
 
-async function loadMyAttendanceHistory() {
+async function loadMyAttendanceHistory(manual = false) {
   const tbody = document.getElementById("attendanceHistoryTbody");
   if (!tbody) return;
+  const refreshBtn = document.getElementById("refreshAttendanceHistoryBtn");
   const hasRows = tbody.children.length > 0 && !tbody.querySelector("td[colspan]");
+  const startedAt = Date.now();
 
   if (hasRows) {
     tbody.classList.add("is-refreshing");
   } else {
     tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-muted);">Đang tải lịch sử điểm danh...</td></tr>`;
   }
+  setRefreshSpin(refreshBtn, true);
 
   try {
     const res = await api.get("/attendances/my-history");
+    if (manual) await waitMinSpin(startedAt);
     const items = Array.isArray(res.data) ? res.data : [];
 
     const totalMinutes = items.reduce((sum, item) => sum + Number(item.total_minutes || 0), 0);
@@ -581,6 +588,7 @@ async function loadMyAttendanceHistory() {
 
     if (items.length === 0) {
       tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-muted);">Chưa có lịch sử điểm danh.</td></tr>`;
+      if (manual) showToast("Đã cập nhật lịch sử điểm danh.", "success");
       return;
     }
 
@@ -601,6 +609,7 @@ async function loadMyAttendanceHistory() {
         `;
       })
       .join("");
+    if (manual) showToast("Đã cập nhật lịch sử điểm danh.", "success");
   } catch (error) {
     const msg = extractApiError(error, "Không thể tải lịch sử điểm danh.");
     if (!hasRows) {
@@ -610,6 +619,7 @@ async function loadMyAttendanceHistory() {
     }
   } finally {
     tbody.classList.remove("is-refreshing");
+    setRefreshSpin(refreshBtn, false);
   }
 }
 
@@ -770,7 +780,7 @@ async function loadHourClaims(manual = false) {
   }
 
   const appealStatusMap = {
-    PENDING: { label: "Chờ Admin xử lý", cls: "status-pending" },
+    PENDING: { label: "Chờ Admin xử lý (≤ 48h)", cls: "status-pending" },
     ACCEPTED: { label: "Admin đã chấp nhận", cls: "status-approved" },
     APPROVED: { label: "Admin đã chấp nhận", cls: "status-approved" },
     REJECTED: { label: "Admin từ chối", cls: "status-rejected" },
@@ -858,7 +868,7 @@ async function submitHourClaimAppeal() {
   try {
     await api.post(`/hour-claims/${claimId}/appeals`, { appeal_reason: reason });
     closeModal("hourAppealModal");
-    showToast("Đã gửi khiếu nại đến quản trị viên.", "success");
+    showToast("Đã gửi khiếu nại đến Quản trị viên (xử lý trong vòng 48 giờ).", "success");
     await loadHourClaims();
   } catch (error) {
     showToast(extractApiError(error, "Không thể gửi khiếu nại."), "error");
@@ -1027,6 +1037,52 @@ async function saveVolunteerSkills() {
   }
 }
 
+async function submitUserChangePassword() {
+  const oldPassword = document.getElementById("profOldPassword")?.value || "";
+  const newPassword = document.getElementById("profNewPassword")?.value || "";
+  const confirmPassword = document.getElementById("profConfirmPassword")?.value || "";
+  const btn = document.getElementById("btnChangeUserPassword");
+
+  if (!oldPassword || !newPassword || !confirmPassword) {
+    showToast("Vui lòng nhập đầy đủ mật khẩu hiện tại và mật khẩu mới.", "warning");
+    return;
+  }
+  if (newPassword.length < 8) {
+    showToast("Mật khẩu mới phải có ít nhất 8 ký tự.", "warning");
+    document.getElementById("profNewPassword")?.focus();
+    return;
+  }
+  if (newPassword === oldPassword) {
+    showToast("Mật khẩu mới phải khác mật khẩu hiện tại.", "warning");
+    document.getElementById("profNewPassword")?.focus();
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    showToast("Xác nhận mật khẩu mới không khớp.", "warning");
+    document.getElementById("profConfirmPassword")?.focus();
+    return;
+  }
+
+  if (btn) btn.disabled = true;
+  try {
+    await api.post("/profile/change-password", {
+      old_password: oldPassword,
+      new_password: newPassword,
+    });
+    showToast("Đổi mật khẩu thành công! Vui lòng đăng nhập lại với mật khẩu mới.", "success");
+    document.getElementById("profOldPassword").value = "";
+    document.getElementById("profNewPassword").value = "";
+    document.getElementById("profConfirmPassword").value = "";
+    setTimeout(() => {
+      Auth.clearSession();
+      window.location.replace("login.html");
+    }, 1200);
+  } catch (error) {
+    showToast(extractApiError(error, "Không thể đổi mật khẩu."), "error");
+    if (btn) btn.disabled = false;
+  }
+}
+
 /* ==================== TAB 5: ĐĂNG KÝ LÀM TỔ CHỨC ==================== */
 
 async function loadOrganizationStatus() {
@@ -1174,7 +1230,7 @@ async function loadMyAttendanceAppeals() {
       PENDING: { label: "Chờ Organizer", cls: "status-pending" },
       ACCEPTED: { label: "Organizer chấp nhận", cls: "status-approved" },
       REJECTED: { label: "Organizer từ chối", cls: "status-rejected" },
-      ADMIN_PENDING: { label: "Chờ Admin xử lý", cls: "status-pending" },
+      ADMIN_PENDING: { label: "Chờ Admin xử lý (≤ 48h)", cls: "status-pending" },
       ADMIN_ACCEPTED: { label: "Admin chấp nhận", cls: "status-approved" },
       ADMIN_REJECTED: { label: "Admin từ chối", cls: "status-rejected" },
     };
@@ -1190,12 +1246,13 @@ async function loadMyAttendanceAppeals() {
           return `
             <div class="vl-appeal-item">
               <div class="vl-appeal-head">
-                <strong>Đơn #${Number(a.registration_id)}</strong>
+                <strong>${escapeHtml(a.campaign_title || `Đơn #${Number(a.registration_id)}`)}</strong>
                 <span class="status-pill ${st.cls}">${escapeHtml(st.label)}</span>
               </div>
               ${a.reason ? `<div class="vl-appeal-reason">${escapeHtml(a.reason)}</div>` : ""}
               ${a.review_note ? `<div class="vl-appeal-meta">Phản hồi Organizer: ${escapeHtml(a.review_note)}</div>` : ""}
               ${a.escalation_reason ? `<div class="vl-appeal-meta">Lý do lên Admin: ${escapeHtml(a.escalation_reason)}</div>` : ""}
+              ${a.status === "ADMIN_PENDING" && a.sla_deadline ? `<div class="vl-appeal-meta">Cam kết xử lý trong 48 giờ (Hạn: ${escapeHtml(safeFormatDateTime(a.sla_deadline))})</div>` : ""}
               ${a.admin_note ? `<div class="vl-appeal-meta">Phản hồi Admin: ${escapeHtml(a.admin_note)}</div>` : ""}
               ${a.status === "REJECTED" ? `<div style="margin-top:8px;"><button type="button" class="btn-action btn-action-primary" onclick="escalateAttendanceAppeal(${Number(a.id)})">Khiếu nại lên Admin</button></div>` : ""}
             </div>
@@ -1208,20 +1265,35 @@ async function loadMyAttendanceAppeals() {
   }
 }
 
-async function escalateAttendanceAppeal(appealId) {
-  const reason = window.prompt("Nhập lý do khiếu nại lên Quản trị viên (tối thiểu 10 ký tự):");
-  if (reason === null) return;
-  const trimmed = reason.trim();
+function escalateAttendanceAppeal(appealId) {
+  const idInput = document.getElementById("escalateAttAppealId");
+  const reasonInput = document.getElementById("escalateAttAppealReasonInput");
+  if (idInput) idInput.value = String(appealId);
+  if (reasonInput) reasonInput.value = "";
+  openModal("escalateAttendanceAppealModal");
+}
+
+async function submitEscalateAttendanceAppeal() {
+  const appealId = Number(document.getElementById("escalateAttAppealId")?.value || 0);
+  const reasonInput = document.getElementById("escalateAttAppealReasonInput");
+  const btn = document.getElementById("confirmEscalateAttAppealBtn");
+  const trimmed = (reasonInput?.value || "").trim();
+  if (!appealId) return;
   if (trimmed.length < 10) {
     showToast("Lý do khiếu nại lên Admin phải có ít nhất 10 ký tự.", "warning");
+    reasonInput?.focus();
     return;
   }
+  if (btn) btn.disabled = true;
   try {
     await api.post(`/attendance-appeals/${appealId}/escalate`, { escalation_reason: trimmed });
-    showToast("Đã chuyển khiếu nại lên Quản trị viên.", "success");
+    closeModal("escalateAttendanceAppealModal");
+    showToast("Đã chuyển khiếu nại lên Quản trị viên (xử lý trong vòng 48 giờ).", "success");
     await loadMyAttendanceAppeals();
     if (typeof NotificationsUI !== "undefined") NotificationsUI.refresh();
   } catch (error) {
     showToast(extractApiError(error, "Không thể gửi khiếu nại lên Admin."), "error");
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }

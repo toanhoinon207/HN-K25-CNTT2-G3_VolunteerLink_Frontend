@@ -16,6 +16,18 @@ api.interceptors.request.use(
             config.headers.Authorization = `Bearer ${token}`;
         }
 
+        // Khi gửi FormData (upload file), để trình duyệt tự đặt multipart/form-data kèm boundary chuẩn
+        if (typeof FormData !== "undefined" && config.data instanceof FormData) {
+            if (typeof config.headers?.setContentType === "function") {
+                config.headers.setContentType(undefined);
+            }
+            if (typeof config.headers?.delete === "function") {
+                config.headers.delete("Content-Type");
+            }
+            delete config.headers["Content-Type"];
+            delete config.headers["content-type"];
+        }
+
         return config;
     },
     (error) => Promise.reject(error)

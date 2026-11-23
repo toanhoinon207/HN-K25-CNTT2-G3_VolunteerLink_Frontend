@@ -9,10 +9,15 @@ document.addEventListener("DOMContentLoaded", () => {
   const resetForm = document.getElementById("resetPasswordForm");
 
   function showStatus(message, type = "info") {
-    if (!statusBox) return;
-    statusBox.style.display = "flex";
-    statusBox.className = `alert alert-${type}`;
-    statusBox.textContent = message;
+    if (statusBox) {
+      statusBox.style.display = "flex";
+      statusBox.className = `alert alert-${type}`;
+      statusBox.textContent = message;
+    }
+    if (typeof showToast === "function") {
+      const toastType = type === "danger" ? "error" : type;
+      showToast(message, toastType);
+    }
   }
 
   if (resetToken) {
@@ -31,7 +36,11 @@ document.addEventListener("DOMContentLoaded", () => {
         showStatus("Vui lòng nhập địa chỉ email.", "warning");
         return;
       }
-      if (btn) btn.disabled = true;
+      const origText = btn ? btn.textContent : "";
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "Đang gửi liên kết...";
+      }
       try {
         const res = await api.post("/auth/forgot-password", { email });
         showStatus(
@@ -42,7 +51,10 @@ document.addEventListener("DOMContentLoaded", () => {
       } catch (err) {
         showStatus(extractApiError(err, "Không thể gửi yêu cầu đặt lại mật khẩu."), "danger");
       } finally {
-        if (btn) btn.disabled = false;
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = origText || "Gửi liên kết đặt lại mật khẩu";
+        }
       }
     });
   }
@@ -63,7 +75,11 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
-      if (btn) btn.disabled = true;
+      const origText = btn ? btn.textContent : "";
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "Đang cập nhật...";
+      }
       try {
         const res = await api.post("/auth/reset-password", {
           token: resetToken,
@@ -76,11 +92,13 @@ document.addEventListener("DOMContentLoaded", () => {
         resetForm.reset();
         setTimeout(() => {
           window.location.replace("login.html");
-        }, 1500);
+        }, 1800);
       } catch (err) {
         showStatus(extractApiError(err, "Đặt lại mật khẩu thất bại."), "danger");
-      } finally {
-        if (btn) btn.disabled = false;
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = origText || "Cập nhật mật khẩu mới";
+        }
       }
     });
   }

@@ -135,9 +135,11 @@ function renderAvatarElement(containerEl, avatarUrl, fallbackText = "U") {
 }
 
 async function uploadAvatarFile(file) {
-  const allowed = ["image/jpeg", "image/png", "image/webp"];
+  const allowed = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
   if (!file) return null;
-  if (!allowed.includes((file.type || "").toLowerCase())) {
+  const mime = (file.type || "").toLowerCase();
+  const hasAllowedExt = /\.(jpe?g|png|webp)$/i.test(file.name || "");
+  if (!allowed.includes(mime) && !hasAllowedExt) {
     throw new Error("Chỉ hỗ trợ ảnh định dạng JPG, PNG hoặc WEBP.");
   }
   if (file.size > 2 * 1024 * 1024) {
@@ -145,9 +147,7 @@ async function uploadAvatarFile(file) {
   }
   const formData = new FormData();
   formData.append("file", file);
-  const res = await api.post("/profile/avatar", formData, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
+  const res = await api.post("/profile/avatar", formData);
   return res.data;
 }
 

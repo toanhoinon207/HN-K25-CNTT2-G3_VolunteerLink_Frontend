@@ -1,118 +1,136 @@
-# VolunteerLink - Cổng Kết Nối Tình Nguyện Viên & Hoạt Động Xã Hội
+# VolunteerLink — Frontend (HTML / CSS / Vanilla JS)
 
-Hệ thống giao diện người dùng đa vai trò được thiết kế tương thích 100% với Backend **FastAPI + MySQL** của dự án VolunteerLink.
+Giao diện người dùng đa vai trò cho nền tảng **VolunteerLink — Cổng Kết Nối Tình Nguyện Viên & Hoạt Động Xã Hội**, kết nối trực tiếp với Backend **FastAPI + MySQL**.
 
 ---
 
-## 1. Kiến trúc phân quyền 3 Vai Trò (Dựa trên Database Schema)
+## 1. Kiến trúc phân quyền 3 vai trò
 
-Hệ thống phân tách không gian làm việc và nghiệp vụ theo cột `users.role` (`Enum("USER", "ORGANIZER", "ADMIN")`):
+Hệ thống phân tách không gian làm việc theo trường `role` trả về từ `/api/auth/login` và `/api/auth/me`:
 
+```text
+                             ┌──────────────────────────┐
+                             │      ĐĂNG NHẬP / ME      │
+                             │   (POST /api/auth/login) │
+                             └─────────────┬────────────┘
+                                           │ Phân quyền role
+               ┌───────────────────────────┼───────────────────────────┐
+               ▼                           ▼                           ▼
+     ┌───────────────────┐       ┌───────────────────┐       ┌───────────────────┐
+     │  1. USER (TNV)    │       │ 2. ORGANIZER (TC) │       │   3. ADMIN (QTV)  │
+     │ user-dashboard    │       │organizer-dashboard│       │  admin-dashboard  │
+     └───────────────────┘       └───────────────────┘       └───────────────────┘
 ```
-                                  ┌──────────────────────────┐
-                                  │      ĐĂNG NHẬP / ME      │
-                                  │   (POST /api/auth/login) │
-                                  └─────────────┬────────────┘
-                                                │ Phân quyền role
-                    ┌───────────────────────────┼───────────────────────────┐
-                    ▼                           ▼                           ▼
-          ┌───────────────────┐       ┌───────────────────┐       ┌───────────────────┐
-          │  1. USER (TNV)    │       │ 2. ORGANIZER (TC) │       │   3. ADMIN (QTV)  │
-          │ user-dashboard    │       │organizer-dashboard│       │  admin-dashboard  │
-          └───────────────────┘       └───────────────────┘       └───────────────────┘
-```
 
 ---
 
-## 2. Chi tiết 3 Vai Trò & Nghiệp Vụ Tương Ứng
+## 2. Chức năng chính theo từng khu vực
 
-### 👤 Vai trò 1: USER (Tình nguyện viên) — `pages/user-dashboard.html`
-- **Đăng ký tài khoản ban đầu**: Mọi người dùng mới đều đăng ký với vai trò mặc định là `USER`.
-- **Tổng quan & Ca của tôi**: Thống kê số ca đã đăng ký, tổng giờ cống hiến, chứng chỉ đạt được. Theo dõi trạng thái đơn đăng ký (`PENDING`, `APPROVED`, `REJECTED`).
-- **Trạm điểm danh trực tuyến**: Nhập mã điểm danh 6 ký tự do Ban Tổ Chức cấp để **Check-in** (bắt đầu) và **Check-out** (kết thúc ca) qua API:
-  - `POST /api/attendances/check-in`
-  - `POST /api/attendances/check-out`
-- **Khám phá chiến dịch**: Lọc theo danh mục (Môi trường, Giáo dục, Y tế, Cộng đồng), nộp đơn đăng ký kèm lời nhắn cá nhân.
-- **Chứng chỉ & Khiếu nại**: Xem chứng nhận số (`CertificateModel`) và gửi yêu cầu xác nhận giờ phát sinh (`HourClaimModel`).
-- **Hồ sơ & Kỹ năng**: Quản lý thông tin cá nhân, cập nhật kỹ năng (Sơ cứu, Ngoại ngữ, Hoạt náo...) và khu vực ưu tiên tham gia.
-- **Đăng ký trở thành Tổ chức (Upgrade lên ORGANIZER)**: Tình nguyện viên điền form đề án tổ chức, nộp đường dẫn tài liệu pháp lý (`document_url`). Hồ sơ chuyển sang trạng thái `PENDING` chờ Admin duyệt. Khi được duyệt, tài khoản được tự động nâng cấp thành `ORGANIZER`.
+### Trang công khai & Xác thực
+- **Trang chủ (`pages/home.html`)**: Giới thiệu nền tảng, chiến dịch nổi bật, điều hướng nhanh tới danh sách chiến dịch và cổng đăng nhập/đăng ký.
+- **Danh sách & Chi tiết chiến dịch (`pages/campaign.html`, `pages/campaign_detail.html`)**: Tìm kiếm, lọc chiến dịch đang mở, xem chi tiết ca/yêu cầu, đăng ký tham gia hoặc tham gia hàng chờ (`Waitlist`).
+- **Đăng nhập / Đăng ký / Quên mật khẩu (`pages/login.html`, `pages/register.html`, `pages/forgot-password.html`)**:
+  - Đăng ký tài khoản mới (mặc định vai trò `USER`).
+  - Hỗ trợ điền nhanh 3 tài khoản mẫu trên trang đăng nhập (`quickFillRole`).
+  - Gửi yêu cầu đặt lại mật khẩu qua email và xác nhận token đặt lại mật khẩu.
+- **Thông báo (`pages/notifications.html`) & In chứng chỉ (`pages/certificate-print.html`)**: Xem thông báo hệ thống, đánh dấu đã đọc và hiển thị/in chứng chỉ điện tử.
 
-### 🏢 Vai trò 2: ORGANIZER (Nhà tổ chức / Đơn vị tổ chức) — `pages/organizer-dashboard.html`
-- **Quy trình cấp quyền**: Không mở chọn vai trò này khi đăng ký tài khoản mới. Người dùng bắt buộc phải nộp hồ sơ đề án tổ chức và được Quản trị viên (ADMIN) thẩm định, phê duyệt thì mới được cấp quyền truy cập vào cổng này.
-- **Tổng quan tổ chức**: Kiểm tra trạng thái phê duyệt pháp lý (`OrganizationModel.status`: `APPROVED`, `PENDING`, `REJECTED`). Hiển thị cảnh báo nếu chưa được duyệt.
-- **Quản lý chiến dịch**:
-  - Tạo mới chiến dịch (FastAPI Schema `CampaignCreate` -> status `DRAFT` qua `POST /campaigns`).
-  - Gửi Admin kiểm duyệt (`POST /campaigns/{id}/submit` -> chuyển thành `PENDING`).
-  - Theo dõi danh sách theo trạng thái: Bản nháp, Chờ duyệt, Đang mở, Hoàn thành.
-- **Trạm điểm danh & Phát mã (Attendance Station)**:
-  - Sinh mã điểm danh 6 ký tự kèm thời hạn hiệu lực qua `POST /api/attendances/code`.
-  - Màn hình hiển thị mã khổ lớn (Live Projector Display) kèm đồng hồ đếm ngược hết hạn để chiếu cho TNV.
-  - Theo dõi danh sách TNV đã check-in / check-out theo thời gian thực.
-- **Duyệt đơn đăng ký**: Phê duyệt (`APPROVED`) hoặc từ chối (`REJECTED` kèm lý do) các đơn của TNV.
-- **Cấp chứng chỉ & Duyệt giờ**: Phê duyệt khiếu nại giờ (`VERIFIED` / `REJECTED`) và phát hành chứng chỉ điện tử.
-- **Hồ sơ tổ chức**: Quản lý thông tin tổ chức, địa chỉ, tài liệu minh chứng (`document_url`).
+### Vai trò 1: `USER` (Tình nguyện viên) — `pages/user-dashboard.html`
+- Thống kê cá nhân, theo dõi đơn đăng ký (`PENDING`, `APPROVED`, `REJECTED`) và danh sách chờ (`Waitlist`).
+- Điểm danh **Check-in / Check-out** bằng mã điểm danh do Tổ chức cung cấp (`/api/attendances/check-in`, `/api/attendances/check-out`).
+- Gửi **khiếu nại điểm danh** (`/api/attendance-appeals`) và **yêu cầu xác nhận giờ phát sinh** (`/api/hour-claims`).
+- Xem & in chứng chỉ số đã được cấp.
+- Cập nhật hồ sơ cá nhân, ảnh đại diện, kỹ năng, khu vực, đổi mật khẩu và nộp hồ sơ đăng ký trở thành Tổ chức.
 
-### 🛡️ Vai trò 3: ADMIN (Quản trị viên hệ thống) — `pages/admin-dashboard.html`
-- **Trung tâm giám sát**: Thống kê vĩ mô toàn hệ thống (Tổng người dùng, Tổ chức, Chiến dịch, Hàng đợi duyệt khẩn cấp).
-- **Kiểm duyệt tổ chức**: Xác thực giấy phép, hồ sơ pháp lý (`document_url`), duyệt tư cách pháp nhân (`APPROVED`) hoặc từ chối (`REJECTED` kèm lý do `rejection_reason`).
-- **Kiểm duyệt chiến dịch**: Phê duyệt mở tuyển công khai (`OPEN`) cho các chiến dịch do tổ chức gửi lên hoặc yêu cầu sửa đổi (`reason`).
-- **Quản lý người dùng & Phân quyền**: Danh sách người dùng hệ thống (`users`), khóa tài khoản vi phạm (`LOCKED`), mở khóa (`ACTIVE`), thay đổi vai trò (USER, ORGANIZER, ADMIN).
-- **Giám sát chứng chỉ & Báo cáo**: Tra cứu mã chứng chỉ (`certificate_code`), quyền thu hồi chứng chỉ (`REVOKED` kèm `revoked_reason`) nếu phát hiện gian lận. Xuất báo cáo hoạt động tổng hợp.
+### Vai trò 2: `ORGANIZER` (Nhà tổ chức) — `pages/organizer-dashboard.html`
+- Quản lý hồ sơ tổ chức và theo dõi trạng thái kiểm duyệt (`PENDING`, `APPROVED`, `REJECTED`).
+- Tạo, chỉnh sửa, tải ảnh và gửi duyệt chiến dịch (`/api/campaigns`).
+- Duyệt/từ chối đơn đăng ký của tình nguyện viên và quản lý hàng chờ.
+- Tạo mã điểm danh, theo dõi danh sách check-in/check-out, xử lý khiếu nại điểm danh và duyệt yêu cầu giờ phát sinh.
+- Cấp chứng chỉ điện tử cho tình nguyện viên đủ điều kiện.
+
+### Vai trò 3: `ADMIN` (Quản trị viên) — `pages/admin-dashboard.html`
+- Thống kê tổng quan toàn hệ thống.
+- Kiểm duyệt hồ sơ đăng ký tổ chức và kiểm duyệt chiến dịch trước khi mở tuyển.
+- Quản lý người dùng, thay đổi vai trò, khóa/mở khóa tài khoản (`user-moderation`) và xem lịch sử kiểm duyệt.
+- Xử lý khiếu nại điểm danh được leo thang lên Admin và giám sát/thu hồi chứng chỉ khi cần.
 
 ---
 
-## 3. Tài khoản kiểm thử nhanh (Seed Data)
+## 3. Tài khoản kiểm thử nhanh (khớp `sql/seed_all.sql` & `js/login.js`)
 
-Trên trang `pages/login.html`, hệ thống đã trang bị sẵn **Thanh chọn nhanh 3 vai trò** (1 click là tự động điền):
+Trên trang `pages/login.html` có sẵn nút điền nhanh cho 3 vai trò:
 
-| Vai trò | Email đăng nhập | Mật khẩu mẫu | Trang đích |
+| Vai trò | Email | Mật khẩu | Trang đích |
 |---|---|---|---|
-| **USER (TNV)** | `user@gmail.com` | `User@123456` | `pages/user-dashboard.html` |
-| **ORGANIZER (Tổ chức)** | `organizer@gmail.com` | `Organizer@123456` | `pages/organizer-dashboard.html` |
-| **ADMIN (Quản trị)** | `admin@gmail.com` | `Admin@123456` | `pages/admin-dashboard.html` |
+| **USER (TNV)** | `user@gmail.com` | `12345678` | `pages/user-dashboard.html` |
+| **ORGANIZER (Tổ chức)** | `organizer@gmail.com` | `12345678` | `pages/organizer-dashboard.html` |
+| **ADMIN (Quản trị)** | `admin@gmail.com` | `12345678` | `pages/admin-dashboard.html` |
 
 ---
 
 ## 4. Cấu trúc thư mục Frontend
 
-```
+```text
 HN-K25-CNTT2-G3_VolunteerLink_Frontend/
-├── index.html                   # Chuyển hướng gốc tới pages/index.html
+├── index.html                     # Tự động chuyển hướng tới pages/home.html
+├── assets/
+│   └── images/logo.svg            # Logo VolunteerLink
 ├── pages/
-│   ├── index.html               # Trang chủ giới thiệu nền tảng & 3 cổng vai trò
-│   ├── login.html               # Đăng nhập với nút chọn nhanh 3 vai trò
-│   ├── register.html            # Đăng ký chọn vai trò USER hoặc ORGANIZER
-│   ├── user-dashboard.html      # Bảng điều khiển Tình nguyện viên (USER)
-│   ├── organizer-dashboard.html # Bảng điều khiển Nhà tổ chức (ORGANIZER)
-│   ├── admin-dashboard.html     # Bảng điều khiển Quản trị viên (ADMIN)
-│   ├── 403.html                 # Trang cảnh báo không đủ quyền hạn
-│   └── forgot-password.html     # Quên mật khẩu
+│   ├── home.html                  # Trang chủ giới thiệu nền tảng
+│   ├── campaign.html              # Danh sách & tìm kiếm chiến dịch
+│   ├── campaign_detail.html       # Chi tiết chiến dịch & đăng ký / waitlist
+│   ├── login.html                 # Đăng nhập (có nút điền nhanh 3 vai trò)
+│   ├── register.html              # Đăng ký tài khoản mới
+│   ├── forgot-password.html       # Quên & đặt lại mật khẩu
+│   ├── user-dashboard.html        # Bảng điều khiển Tình nguyện viên (USER)
+│   ├── organizer-dashboard.html   # Bảng điều khiển Nhà tổ chức (ORGANIZER)
+│   ├── admin-dashboard.html       # Bảng điều khiển Quản trị viên (ADMIN)
+│   ├── notifications.html         # Trung tâm thông báo
+│   ├── certificate-print.html     # Giao diện xem & in chứng chỉ
+│   └── 403.html                   # Trang thông báo không đủ quyền truy cập
 ├── css/
-│   ├── style.css                # Base stylesheet, design tokens, typography
-│   ├── dashboard.css            # Stylesheet chuyên dụng cho 3 dashboard vai trò
-│   └── responsive.css           # Responsive mobile / tablet
+│   ├── tokens.css                 # Biến thiết kế (màu sắc, spacing, typography)
+│   ├── style.css                  # Stylesheet nền tảng dùng chung
+│   ├── components.css             # Style các thành phần UI dùng chung
+│   ├── dashboard_common.css       # Layout & thành phần chung cho 3 dashboard
+│   ├── home.css                   # Style trang chủ
+│   ├── campaign.css               # Style trang danh sách chiến dịch
+│   ├── campaign_detail.css        # Style trang chi tiết chiến dịch
+│   ├── notifications.css          # Style trang thông báo
+│   ├── user_dashboard.css         # Style riêng dashboard USER
+│   ├── organizer_dashboard.css    # Style riêng dashboard ORGANIZER
+│   └── responsive.css             # Responsive cho tablet / mobile
 └── js/
-    ├── config.js                # API_BASE_URL (http://127.0.0.1:8000/api)
-    ├── api.js                   # Axios client + Interceptor tự động gắn Bearer Token
-    ├── auth.js                  # Quản lý phiên đăng nhập & điều hướng Role-based
-    ├── data_store.js            # Lưu trữ & đồng bộ dữ liệu mẫu theo Database Backend
-    ├── utils.js                 # XSS escapeHtml, formatDateTime, showToast
-    ├── login.js                 # Xử lý form đăng nhập & fallback demo
-    ├── register.js              # Xử lý form đăng ký
-    ├── user_dashboard.js        # Logic nghiệp vụ Tình nguyện viên
-    ├── organizer_dashboard.js   # Logic nghiệp vụ Nhà tổ chức
-    └── admin_dashboard.js       # Logic nghiệp vụ Quản trị viên
+    ├── config.js                  # Cấu hình API_BASE_URL
+    ├── api.js                     # Axios client + interceptor gắn Bearer Token & xử lý FormData/401
+    ├── auth.js                    # Quản lý phiên đăng nhập, kiểm tra role & điều hướng
+    ├── layout.js                  # Header/Navigation dùng chung & trạng thái đăng nhập
+    ├── utils.js                   # Hàm tiện ích (escapeHtml, formatDateTime, toast, ...)
+    ├── home.js                    # Logic trang chủ
+    ├── login.js                   # Logic đăng nhập & quickFillRole
+    ├── register.js                # Logic đăng ký tài khoản
+    ├── forgot_password.js         # Logic quên & đặt lại mật khẩu
+    ├── campaign.js                # Logic danh sách & lọc chiến dịch
+    ├── campaign_detail.js         # Logic chi tiết chiến dịch, đăng ký & waitlist
+    ├── notifications.js           # Logic trang thông báo
+    ├── user_dashboard.js          # Logic nghiệp vụ USER
+    ├── organizer_dashboard.js     # Logic nghiệp vụ ORGANIZER
+    └── admin_dashboard.js         # Logic nghiệp vụ ADMIN
 ```
 
 ---
 
-## 5. Hướng dẫn chạy ứng dụng
+## 5. Hướng dẫn cấu hình & chạy ứng dụng
 
-1. **Khởi động Backend FastAPI** (trong thư mục backend):
-   ```bash
-   uvicorn app.main:app --reload
-   ```
-2. **Khởi động Frontend**:
-   - Sử dụng **Live Server** trong VS Code: Chuột phải `index.html` hoặc `pages/index.html` chọn **Open with Live Server**.
-   - Hoặc mở trực tiếp file `index.html` trên trình duyệt.
-   - Trải nghiệm đăng nhập bằng 3 nút chọn vai trò mẫu để kiểm tra từng luồng nghiệp vụ tương ứng!
+1. **Khởi động Backend**: Đảm bảo server FastAPI đang chạy tại `http://127.0.0.1:8000` (xem `README.md` của repository Backend).
+2. **Cấu hình API URL (nếu cần)**:
+   - Mặc định `js/config.js` tự trỏ `API_BASE_URL` về `http://127.0.0.1:8000/api` khi chạy ở `localhost` hoặc `127.0.0.1`.
+   - Có thể ghi đè trước khi nạp `config.js` qua biến `window.VOLUNTEERLINK_API_BASE_URL` hoặc chỉnh trực tiếp trong `js/config.js`.
+3. **Chạy Frontend**:
+   - Dùng **Live Server** trong VS Code: chuột phải `index.html` (hoặc `pages/home.html`) → chọn **Open with Live Server** (mặc định `http://127.0.0.1:5500`).
+   - Hoặc dùng static server bất kỳ tại thư mục gốc Frontend, ví dụ:
+     ```bash
+     python -m http.server 5500
+     ```
+   - Truy cập `http://127.0.0.1:5500` trên trình duyệt để sử dụng.

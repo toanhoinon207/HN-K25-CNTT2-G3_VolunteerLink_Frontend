@@ -63,8 +63,31 @@ window.quickFillRole = function (role) {
     }
 };
 
+function redirectIfAlreadyAuthenticated() {
+    if (typeof Auth === "undefined" || !Auth.isLoggedIn()) return false;
+    const cachedUser = Auth.getUser();
+    const urlParams = new URLSearchParams(window.location.search);
+    const redirectPage = urlParams.get("redirect");
+    const isSafeRedirect =
+        redirectPage &&
+        !redirectPage.startsWith("//") &&
+        !/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(redirectPage) &&
+        !redirectPage.includes("\\");
+    if (cachedUser && cachedUser.role) {
+        window.location.replace(isSafeRedirect ? redirectPage : Auth.getDashboard(cachedUser.role));
+        return true;
+    }
+    return false;
+}
+
+redirectIfAlreadyAuthenticated();
+window.addEventListener("pageshow", () => {
+    redirectIfAlreadyAuthenticated();
+});
+
 // Đọc query param preset nếu có từ URL (?preset=USER / ORGANIZER / ADMIN)
 document.addEventListener("DOMContentLoaded", () => {
+    if (redirectIfAlreadyAuthenticated()) return;
     const params = new URLSearchParams(window.location.search);
     const preset = params.get("preset");
     if (preset && typeof window.quickFillRole === "function") {
@@ -103,7 +126,7 @@ loginForm.addEventListener("submit", async function (event) {
         isValid = false;
     } else if (password.length < 8) {
         passwordGroup.classList.add("has-error");
-        if (passwordError) passwordError.textContent = "Mật khẩu tối thiểu 8 ký tự.";
+        if (passwordError) passwordError.textContent = "Mật khẩu không hợp lệ.";
         isValid = false;
     }
 
@@ -133,7 +156,7 @@ loginForm.addEventListener("submit", async function (event) {
         const targetPage = isSafeRedirect ? redirectPage : Auth.getDashboard(user.role);
 
         setTimeout(() => {
-            window.location.href = targetPage;
+            window.location.replace(targetPage);
         }, 800);
 
     } catch (error) {
@@ -151,6 +174,8 @@ loginForm.addEventListener("submit", async function (event) {
                 errorMessage = typeof detail === "string" ? detail : "Email hoặc mật khẩu không chính xác!";
                 emailGroup.classList.add("has-error");
                 passwordGroup.classList.add("has-error");
+                if (emailError) emailError.textContent = "Email hoặc mật khẩu không chính xác.";
+                if (passwordError) passwordError.textContent = "Mật khẩu không hợp lệ.";
             } else if (status === 403) {
                 // Backend trả về HTTP 403 khi tài khoản bị khóa (status != ACTIVE)
                 errorMessage = typeof detail === "string" ? detail : "Tài khoản đã bị khóa hoặc vô hiệu hóa!";

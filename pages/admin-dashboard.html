@@ -182,7 +182,12 @@
         <div class="ud-card">
           <div class="ud-card-header" style="display: flex; align-items: center; justify-content: space-between;">
             <h2>Hồ sơ Tổ chức chờ duyệt</h2>
-            <button type="button" class="btn btn-outline btn-sm" onclick="switchAdminTab('organizations')">Xem tất cả</button>
+            <div style="display: inline-flex; align-items: center; gap: 8px;">
+              <button type="button" class="btn btn-outline btn-sm org-icon-btn" onclick="loadAdminOrganizations(true, this)" aria-label="Làm mới hồ sơ tổ chức chờ duyệt" title="Làm mới">
+                <svg class="svg-icon" aria-hidden="true" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              </button>
+              <button type="button" class="btn btn-outline btn-sm" onclick="switchAdminTab('organizations')">Xem tất cả</button>
+            </div>
           </div>
           <div class="table-wrapper">
             <table class="ud-table">
@@ -204,7 +209,12 @@
         <div class="ud-card">
           <div class="ud-card-header" style="display: flex; align-items: center; justify-content: space-between;">
             <h2>Chiến dịch chờ phê duyệt</h2>
-            <button type="button" class="btn btn-outline btn-sm" onclick="switchAdminTab('campaigns')">Xem tất cả</button>
+            <div style="display: inline-flex; align-items: center; gap: 8px;">
+              <button type="button" class="btn btn-outline btn-sm org-icon-btn" onclick="loadAdminCampaigns(true, this)" aria-label="Làm mới chiến dịch chờ phê duyệt" title="Làm mới">
+                <svg class="svg-icon" aria-hidden="true" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              </button>
+              <button type="button" class="btn btn-outline btn-sm" onclick="switchAdminTab('campaigns')">Xem tất cả</button>
+            </div>
           </div>
           <div class="table-wrapper">
             <table class="ud-table">
@@ -237,12 +247,17 @@
       <div class="ud-card">
         <div class="ud-card-body" style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-light);">
           <input type="text" id="orgSearchInput" class="ud-control" style="max-width: 320px;" placeholder="Tìm tên tổ chức, email..." oninput="filterAdminOrgs()">
-          <select id="orgStatusFilter" class="ud-control" style="max-width: 220px;" onchange="filterAdminOrgs()">
-            <option value="ALL">Tất cả trạng thái</option>
-            <option value="PENDING">Đang chờ duyệt</option>
-            <option value="APPROVED">Đã phê duyệt</option>
-            <option value="REJECTED">Đã từ chối</option>
-          </select>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <select id="orgStatusFilter" class="ud-control" style="max-width: 220px;" onchange="filterAdminOrgs()">
+              <option value="ALL">Tất cả trạng thái</option>
+              <option value="PENDING">Đang chờ duyệt</option>
+              <option value="APPROVED">Đã phê duyệt</option>
+              <option value="REJECTED">Đã từ chối</option>
+            </select>
+            <button type="button" class="btn btn-outline btn-sm org-icon-btn" onclick="loadAdminOrganizations(true, this)" aria-label="Làm mới danh sách tổ chức" title="Làm mới">
+              <svg class="svg-icon" aria-hidden="true" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            </button>
+          </div>
         </div>
         <div class="table-wrapper">
           <table class="ud-table">
@@ -276,13 +291,18 @@
       <div class="ud-card">
         <div class="ud-card-body" style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-light);">
           <input type="text" id="campSearchInput" class="ud-control" style="max-width: 320px;" placeholder="Tìm tên chiến dịch, địa điểm..." oninput="filterAdminCamps()">
-          <select id="campStatusFilter" class="ud-control" style="max-width: 220px;" onchange="filterAdminCamps()">
-            <option value="ALL">Tất cả chiến dịch</option>
-            <option value="PENDING">Chờ duyệt</option>
-            <option value="OPEN">Đang mở (Công khai)</option>
-            <option value="CLOSED">Đã đóng</option>
-            <option value="COMPLETED">Hoàn thành</option>
-          </select>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <select id="campStatusFilter" class="ud-control" style="max-width: 220px;" onchange="filterAdminCamps()">
+              <option value="ALL">Tất cả chiến dịch</option>
+              <option value="PENDING">Chờ duyệt</option>
+              <option value="OPEN">Đang mở (Công khai)</option>
+              <option value="CLOSED">Đã đóng</option>
+              <option value="COMPLETED">Hoàn thành</option>
+            </select>
+            <button type="button" class="btn btn-outline btn-sm org-icon-btn" onclick="loadAdminCampaigns(true, this)" aria-label="Làm mới danh sách chiến dịch" title="Làm mới">
+              <svg class="svg-icon" aria-hidden="true" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            </button>
+          </div>
         </div>
         <div class="table-wrapper">
           <table class="ud-table">
@@ -328,6 +348,9 @@
               <option value="ACTIVE">Hoạt động</option>
               <option value="LOCKED">Đã khóa</option>
             </select>
+            <button type="button" class="btn btn-outline btn-sm org-icon-btn" onclick="loadAdminUsers(true, this)" aria-label="Làm mới danh sách người dùng" title="Làm mới">
+              <svg class="svg-icon" aria-hidden="true" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            </button>
           </div>
         </div>
         <div class="table-wrapper">
@@ -361,11 +384,16 @@
       <div class="ud-card">
         <div class="ud-card-body" style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-light);">
           <input type="text" id="certSearchInput" class="ud-control" style="max-width: 320px;" placeholder="Tìm mã chứng chỉ, TNV, chiến dịch..." oninput="filterAdminCerts()">
-          <select id="certStatusFilter" class="ud-control" style="max-width: 200px;" onchange="filterAdminCerts()">
-            <option value="ALL">Tất cả trạng thái</option>
-            <option value="ACTIVE">Hợp lệ (ACTIVE)</option>
-            <option value="REVOKED">Đã thu hồi (REVOKED)</option>
-          </select>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <select id="certStatusFilter" class="ud-control" style="max-width: 200px;" onchange="filterAdminCerts()">
+              <option value="ALL">Tất cả trạng thái</option>
+              <option value="ACTIVE">Hợp lệ (ACTIVE)</option>
+              <option value="REVOKED">Đã thu hồi (REVOKED)</option>
+            </select>
+            <button type="button" class="btn btn-outline btn-sm org-icon-btn" onclick="loadAdminCertificates(true, this)" aria-label="Làm mới danh sách chứng chỉ" title="Làm mới">
+              <svg class="svg-icon" aria-hidden="true" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            </button>
+          </div>
         </div>
         <div class="table-wrapper">
           <table class="ud-table">
@@ -396,23 +424,36 @@
         </div>
       </div>
 
+      <div class="ud-card" style="margin-bottom: 16px; border-left: 4px solid var(--primary); background: var(--surface-alt, #f8fafc);">
+        <div class="ud-card-body" style="padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+          <div style="font-size: 0.9rem; color: var(--text-main);">
+            <strong>Cam kết xử lý (SLA 48 giờ):</strong> Mọi khiếu nại chuyển lên Quản trị viên sẽ được đối chiếu dữ liệu điểm danh thực tế và xử lý trong vòng <strong>48 giờ</strong> kể từ thời điểm tiếp nhận.
+          </div>
+          <span class="status-pill status-pending" style="font-size: 0.78rem;">SLA: Tối đa 48 giờ</span>
+        </div>
+      </div>
+
       <div class="ud-card" style="margin-bottom: 20px;">
         <div class="ud-card-header">
           <h2>Khiếu nại giờ đóng góp</h2>
+          <button type="button" class="btn btn-outline btn-sm org-icon-btn" onclick="loadAdminAppeals(true, this)" aria-label="Làm mới khiếu nại giờ đóng góp" title="Làm mới">
+            <svg class="svg-icon" aria-hidden="true" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          </button>
         </div>
         <div class="table-wrapper">
           <table class="ud-table">
             <thead>
               <tr>
                 <th>TNV / Chiến dịch</th>
-                <th>Giờ đề nghị</th>
+                <th>Đối chiếu số giờ</th>
                 <th>Lý do khiếu nại</th>
+                <th>Hạn xử lý (48h)</th>
                 <th>Trạng thái</th>
                 <th>Thao tác</th>
               </tr>
             </thead>
             <tbody id="adminHourAppealsTbody">
-              <tr><td colspan="5" class="ud-empty">Đang tải...</td></tr>
+              <tr><td colspan="6" class="ud-empty">Đang tải...</td></tr>
             </tbody>
           </table>
         </div>
@@ -421,20 +462,24 @@
       <div class="ud-card">
         <div class="ud-card-header">
           <h2>Khiếu nại điểm danh</h2>
+          <button type="button" class="btn btn-outline btn-sm org-icon-btn" onclick="loadAdminAppeals(true, this)" aria-label="Làm mới khiếu nại điểm danh" title="Làm mới">
+            <svg class="svg-icon" aria-hidden="true" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          </button>
         </div>
         <div class="table-wrapper">
           <table class="ud-table">
             <thead>
               <tr>
-                <th>Đơn / TNV</th>
+                <th>TNV / Chiến dịch</th>
                 <th>Lý do gốc</th>
                 <th>Lý do chuyển Admin</th>
+                <th>Hạn xử lý (48h)</th>
                 <th>Trạng thái</th>
                 <th>Thao tác</th>
               </tr>
             </thead>
             <tbody id="adminAttendanceAppealsTbody">
-              <tr><td colspan="5" class="ud-empty">Đang tải...</td></tr>
+              <tr><td colspan="6" class="ud-empty">Đang tải...</td></tr>
             </tbody>
           </table>
         </div>
@@ -578,6 +623,72 @@
       <div class="dash-modal-footer">
         <button type="button" class="btn btn-outline" onclick="closeModal('revokeCertModal')">Hủy</button>
         <button type="button" class="btn btn-primary" style="background: var(--danger); border-color: var(--danger);" onclick="submitRevokeCert()">Xác nhận thu hồi</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CHI TIẾT & XỬ LÝ KHIẾU NẠI GIỜ ĐÓNG GÓP (ADMIN) -->
+  <div class="dash-modal-backdrop" id="adminHourAppealModal" role="dialog" aria-modal="true" aria-labelledby="adminHourAppealModalTitle">
+    <div class="dash-modal dash-modal--wide" style="max-width: 720px;">
+      <div class="dash-modal-header">
+        <h3 id="adminHourAppealModalTitle">Chi tiết &amp; Đối chiếu khiếu nại giờ</h3>
+        <button type="button" class="dash-modal-close" aria-label="Đóng" onclick="closeModal('adminHourAppealModal')">&times;</button>
+      </div>
+      <div class="dash-modal-body">
+        <input type="hidden" id="adminHourAppealId">
+        <input type="hidden" id="adminHourAppealMode">
+        <div id="adminHourAppealDetailBody" style="margin-bottom: 16px;"></div>
+
+        <div id="adminHourAppealFormSection" style="padding-top: 14px; border-top: 1px solid var(--border);">
+          <div class="ud-field" id="adminHourAppealHoursField">
+            <label for="adminHourAppealApprovedInput">Số giờ Admin công nhận (giờ) <span aria-hidden="true">*</span></label>
+            <input type="number" id="adminHourAppealApprovedInput" class="ud-control" min="0.25" step="0.25" placeholder="Nhập số giờ công nhận...">
+            <div id="adminHourAppealMaxHint" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;"></div>
+          </div>
+          <div class="ud-field" style="margin-bottom: 0;">
+            <label for="adminHourAppealNoteInput">Ghi chú quyết định của Admin <span aria-hidden="true">*</span></label>
+            <textarea id="adminHourAppealNoteInput" class="ud-control" rows="3" placeholder="Nhập căn cứ đối chiếu và kết luận của Quản trị viên..."></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="dash-modal-footer" id="adminHourAppealModalFooter">
+        <button type="button" class="btn btn-outline" onclick="closeModal('adminHourAppealModal')">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CHI TIẾT & XỬ LÝ KHIẾU NẠI ĐIỂM DANH (ADMIN) -->
+  <div class="dash-modal-backdrop" id="adminAttendanceAppealModal" role="dialog" aria-modal="true" aria-labelledby="adminAttendanceAppealModalTitle">
+    <div class="dash-modal dash-modal--wide" style="max-width: 720px;">
+      <div class="dash-modal-header">
+        <h3 id="adminAttendanceAppealModalTitle">Chi tiết &amp; Đối chiếu khiếu nại điểm danh</h3>
+        <button type="button" class="dash-modal-close" aria-label="Đóng" onclick="closeModal('adminAttendanceAppealModal')">&times;</button>
+      </div>
+      <div class="dash-modal-body">
+        <input type="hidden" id="adminAttAppealId">
+        <input type="hidden" id="adminAttAppealMode">
+        <div id="adminAttAppealDetailBody" style="margin-bottom: 16px;"></div>
+
+        <div id="adminAttAppealFormSection" style="padding-top: 14px; border-top: 1px solid var(--border);">
+          <div id="adminAttAppealTimeFields" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 12px;">
+            <div class="ud-field" style="margin-bottom: 0;">
+              <label for="adminAttAppealCheckInInput">Giờ Check-in công nhận</label>
+              <input type="datetime-local" id="adminAttAppealCheckInInput" class="ud-control">
+            </div>
+            <div class="ud-field" style="margin-bottom: 0;">
+              <label for="adminAttAppealCheckOutInput">Giờ Check-out công nhận</label>
+              <input type="datetime-local" id="adminAttAppealCheckOutInput" class="ud-control">
+            </div>
+          </div>
+          <div id="adminAttAppealTimeHint" style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px;"></div>
+          <div class="ud-field" style="margin-bottom: 0;">
+            <label for="adminAttAppealNoteInput">Ghi chú quyết định của Admin (tối thiểu 3 ký tự) <span aria-hidden="true">*</span></label>
+            <textarea id="adminAttAppealNoteInput" class="ud-control" rows="3" placeholder="Nhập căn cứ đối chiếu điểm danh và kết luận của Quản trị viên..."></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="dash-modal-footer" id="adminAttAppealModalFooter">
+        <button type="button" class="btn btn-outline" onclick="closeModal('adminAttendanceAppealModal')">Đóng</button>
       </div>
     </div>
   </div>

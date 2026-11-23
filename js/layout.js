@@ -726,8 +726,12 @@ const Layout = {
 
     const imgEl = fragment.querySelector(".campaign-card-img");
     if (imgEl) {
-      if (campaign.image_url) {
-        imgEl.src = campaign.image_url;
+      const resolvedImgUrl =
+        typeof resolveBackendAssetUrl === "function"
+          ? resolveBackendAssetUrl(campaign.image_url) || campaign.image_url
+          : campaign.image_url;
+      if (resolvedImgUrl) {
+        imgEl.src = resolvedImgUrl;
         imgEl.alt = campaign.title || "Ảnh chiến dịch tình nguyện";
       } else {
         imgEl.removeAttribute("src");
