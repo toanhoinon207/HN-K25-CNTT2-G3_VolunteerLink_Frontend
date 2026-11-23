@@ -18,7 +18,7 @@ const NotificationsUI = (() => {
     let refreshTimer = null;
     let loadVersion = 0;
 
-    const REFRESH_INTERVAL = 30000;
+    const REFRESH_INTERVAL = 8000;
     const DROPDOWN_LIMIT = 5;
     const PAGE_LIMIT = 20;
     let pageOffset = 0;
@@ -43,16 +43,24 @@ const NotificationsUI = (() => {
 
     function formatTime(value) {
         if (!value) return "";
+        if (typeof parseApiDate === "function") {
+            const d = parseApiDate(value);
+            if (!d) return "";
+            return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true }) + " " +
+                d.toLocaleDateString("vi-VN");
+        }
 
-        const normalized = /(?:Z|[+-]\d{2}:\d{2})$/i.test(value)
-            ? value
-            : `${value}+07:00`;
+        const str = String(value).trim().replace(" ", "T");
+        const normalized = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(str)
+            ? str
+            : `${str}+07:00`;
 
         const date = new Date(normalized);
 
         if (Number.isNaN(date.getTime())) return "";
 
-        return date.toLocaleString("vi-VN");
+        return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true }) + " " +
+            date.toLocaleDateString("vi-VN");
     }
 
     function getApi() {
@@ -75,7 +83,15 @@ const NotificationsUI = (() => {
             const campaignPath = link.match(/^\/(?:api\/)?campaigns\/(\d+)\/?$/);
             if (campaignPath) {
                 link = "user-dashboard.html?tab=overview&campaign_id=" + campaignPath[1];
+            } else if (/^\/?pages\/my-registrations\.html/i.test(link)) {
+                link = "user-dashboard.html?tab=overview";
+            } else if (/^\/?pages\/certificates\.html/i.test(link)) {
+                link = "user-dashboard.html?tab=certificates";
             }
+            link = link
+                .replace(/([?&])tab=registrations\b/i, "$1tab=volunteers")
+                .replace(/([?&])tab=hours\b/i, "$1tab=certificates")
+                .replace(/([?&])tab=(?:hour-appeals|attendance-appeals)\b/i, "$1tab=appeals");
             const target = new URL(link, window.location.href);
 
             if (
@@ -746,6 +762,13 @@ const NotificationsUI = (() => {
                 load();
             }
         }, REFRESH_INTERVAL);
+
+        document.addEventListener("visibilitychange", () => {
+            if (!document.hidden) load();
+        });
+        window.addEventListener("focus", () => {
+            load();
+        });
     }
 
     function stopAutoRefresh() {
@@ -761,6 +784,9 @@ const NotificationsUI = (() => {
         if (!isInbox()) return;
         const user = await Auth.requireAuth();
         if (!user) return;
+        if (typeof Layout !== "undefined" && typeof Layout.renderPublicShell === "function") {
+            Layout.renderPublicShell("btnInboxLogout");
+        }
         getElement("notificationDashboard").href = Auth.getDashboard(user.role);
         init();
     });
@@ -806,6 +832,7 @@ const NotificationsUI = (() => {
     return {
         init,
         load,
+        refresh: load,
         toggle,
         markRead,
         markAllRead,

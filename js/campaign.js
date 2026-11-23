@@ -28,8 +28,12 @@ function checkScrollBottom() {
 function updatePaginationButtons() {
   const btnPrev = document.getElementById("btn-page-prev");
   const btnNext = document.getElementById("btn-page-next");
+  const indicator = document.getElementById("campaignPageIndicator");
   if (btnPrev) btnPrev.disabled = currentPage <= 1;
   if (btnNext) btnNext.disabled = currentPage >= totalPages;
+  if (indicator) {
+    indicator.textContent = totalPages > 1 ? `Trang ${currentPage} / ${totalPages}` : "";
+  }
   checkScrollBottom();
 }
 
@@ -132,6 +136,30 @@ async function loadCampaigns(page = 1, shouldScrollTop = false) {
 
 document.addEventListener("DOMContentLoaded", () => {
   Layout.renderPublicShell("btnCampaignLogout");
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlKeyword = urlParams.get("keyword");
+  const urlCategory = urlParams.get("category");
+  const urlStatus = urlParams.get("status");
+
+  const keywordInput = document.getElementById("filter-keyword");
+  if (urlKeyword && keywordInput) {
+    keywordInput.value = urlKeyword.trim();
+  }
+  const statusSelect = document.getElementById("filter-status");
+  if (urlStatus && statusSelect) {
+    statusSelect.value = urlStatus.trim();
+  }
+  if (urlCategory) {
+    const catSelect = document.getElementById("filter-category");
+    if (catSelect) {
+      const opt = document.createElement("option");
+      opt.value = urlCategory.trim();
+      opt.textContent = urlCategory.trim();
+      catSelect.appendChild(opt);
+      catSelect.value = urlCategory.trim();
+    }
+  }
 
   document.getElementById("filter-category")?.addEventListener("change", () => {
     loadCampaigns(1);

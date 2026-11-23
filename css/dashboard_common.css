@@ -1,4 +1,4 @@
-﻿/* ==========================================================================
+/* ==========================================================================
    User Dashboard — Bento Workspace + Top-Nav (Không Sidebar trái)
    Kết hợp Modern Web Guidance (tabs horizontal scroll, responsive-table, forms, accessibility)
    và Design-Taste-Frontend (Bento Grid, equal edges, tabular-nums, hover/press micro-interactions)
@@ -89,26 +89,21 @@
   color: var(--accent);
 }
 
-/* ---------- Horizontal Tablist ---------- */
+/* ---------- Tablist ---------- */
 .ud-tablist {
   display: flex;
   align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  flex-wrap: balance;
   gap: 4px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  scroll-snap-type: inline proximity;
   padding-block: 4px;
   min-inline-size: 0;
-}
-
-.ud-tablist::-webkit-scrollbar {
-  display: none;
 }
 
 .ud-tab-btn {
   position: relative;
   flex: none;
-  scroll-snap-align: start;
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -420,7 +415,7 @@
 }
 
 .ud-bento-hero {
-  background: linear-gradient(135deg, #14593C 0%, #1E7E55 55%, #059669 100%);
+  background: linear-gradient(135deg, #14593C 0%, #1E7E55 100%);
   color: #FFFFFF;
   border-radius: 18px;
   padding: 28px 30px;
@@ -539,7 +534,7 @@
 }
 
 .ud-kpi-icon--info { background: var(--info-bg); color: var(--info); }
-.ud-kpi-icon--ai { background: var(--ai-light); color: var(--ai); }
+.ud-kpi-icon--ai { background: var(--primary-light); color: var(--primary); }
 .ud-kpi-icon--accent { background: var(--accent-light); color: var(--accent); }
 
 .ud-kpi-value {
@@ -617,9 +612,15 @@
 .table-wrapper {
   overflow-x: auto;
   overflow-y: auto;
-  max-block-size: clamp(320px, 52vh, 520px);
+  max-block-size: clamp(320px, 55dvh, 620px);
   max-inline-size: 100%;
   container-type: inline-size;
+  scrollbar-width: none;
+  overscroll-behavior: contain;
+}
+
+.table-wrapper::-webkit-scrollbar {
+  display: none;
 }
 
 .ud-table {
@@ -665,6 +666,26 @@
   justify-content: flex-end;
   flex-wrap: nowrap !important;
   gap: 6px;
+}
+
+.ud-table tbody td:last-child :is(.btn-action, .btn, button, a.btn-action, a.btn) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-block-size: 34px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.ud-table tbody.is-refreshing {
+  opacity: 0.52;
+  pointer-events: none;
+  transition: opacity 0.16s ease;
 }
 
 .ud-table tbody tr:last-child td {
@@ -771,8 +792,29 @@ textarea.ud-control {
   align-items: start;
 }
 
+#tab-attendance .ud-two-col {
+  align-items: stretch;
+}
+
 #tab-attendance .ud-two-col > .ud-card:first-child {
   border-block-start: 3px solid var(--primary);
+}
+
+#tab-attendance .ud-two-col > .ud-card:last-child {
+  display: flex;
+  flex-direction: column;
+}
+
+#tab-attendance .table-wrapper {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  max-block-size: 272px;
+}
+
+@media (max-width: 1024px) {
+  #tab-attendance .table-wrapper {
+    max-block-size: clamp(260px, 50dvh, 460px);
+  }
 }
 
 .ud-code-input {
@@ -1008,6 +1050,36 @@ textarea.ud-control {
   color: #FFFFFF;
 }
 
+.btn-action-danger {
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+  color: var(--danger);
+}
+
+.btn-action-danger:hover {
+  background: #FEE2E2;
+  border-color: #FCA5A5;
+  color: var(--danger);
+}
+
+.btn-action-blue {
+  background: var(--info-bg);
+  border-color: var(--info-border);
+  color: #1D4ED8;
+}
+
+.btn-action-blue:hover {
+  background: #DBEAFE;
+  border-color: var(--info);
+}
+
+.btn-group-sm {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
 .cert-card {
   background: var(--surface);
   border: 1px solid var(--ud-hairline);
@@ -1050,17 +1122,37 @@ textarea.ud-control {
 .status-pill {
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   padding: 4px 10px;
   border-radius: var(--radius-full);
-  font-size: 0.75rem;
+  font-size: 0.76rem;
   font-weight: 700;
+  line-height: 1.2;
   white-space: nowrap;
 }
+
+.status-pill::before {
+  content: "";
+  inline-size: 6px;
+  block-size: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.status-pill .status-dot {
+  display: none;
+}
+
 .status-pending  { background: var(--warning-bg); color: #B45309; }
 .status-approved,
+.status-verified,
 .status-open     { background: var(--success-bg); color: #047857; }
-.status-rejected { background: var(--danger-bg); color: var(--danger); }
-.status-closed   { background: var(--surface-alt); color: var(--text-muted); }
+.status-rejected,
+.status-cancelled { background: var(--danger-bg); color: var(--danger); }
+.status-completed { background: var(--info-bg); color: #1D4ED8; }
+.status-closed,
+.status-draft    { background: var(--surface-alt); color: var(--text-muted); }
 
 /* ---------- Reduced Motion & Responsive ---------- */
 @media (prefers-reduced-motion: reduce) {
@@ -1084,11 +1176,9 @@ textarea.ud-control {
   .ud-tablist {
     order: 3;
     inline-size: 100%;
+    justify-content: flex-start;
     border-block-start: 1px solid var(--border-light);
     padding-block-start: 8px;
-    padding-inline-end: 20px;
-    -webkit-mask-image: linear-gradient(to right, #000 90%, transparent 100%);
-    mask-image: linear-gradient(to right, #000 90%, transparent 100%);
   }
 
   .ud-bento-top,
@@ -1134,10 +1224,54 @@ textarea.ud-control {
 }
 
 @keyframes orgSpin {
-  to { transform: rotate(360deg); }
+  to { rotate: 1turn; }
 }
 
-.org-icon-btn.is-spinning .svg-icon {
-  animation: orgSpin 0.7s linear infinite;
+.org-icon-btn.is-spinning .svg-icon,
+.btn.is-spinning .svg-icon {
+  animation: orgSpin 0.75s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .org-icon-btn.is-spinning .svg-icon,
+  .btn.is-spinning .svg-icon {
+    animation-duration: 3s;
+  }
+}
+
+/* ---------- Appeals List & Table Pagination ---------- */
+.vl-appeal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.vl-appeal-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.vl-appeal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.vl-appeal-reason {
+  font-size: 0.88rem;
+  color: var(--text-main);
+  line-height: 1.5;
+}
+
+.vl-appeal-meta {
+  font-size: 0.8rem;
+  color: var(--text-muted);
 }
 

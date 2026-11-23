@@ -13,13 +13,12 @@ function getCampaignIdFromUrl() {
   return params.get("id");
 }
 
-function safeFormatDateTime(value) {
-  if (!value) return "Đang cập nhật";
-  const date = new Date(value);
-  if (isNaN(date.getTime())) return "Đang cập nhật";
+function formatCampaignDateTime(value) {
+  const d = typeof parseApiDate === "function" ? parseApiDate(value) : new Date(value);
+  if (!d || isNaN(d.getTime())) return "Đang cập nhật";
   return typeof formatDateTime === "function"
-    ? formatDateTime(value)
-    : date.toLocaleString("vi-VN");
+    ? formatDateTime(d)
+    : d.toLocaleString("vi-VN");
 }
 
 function showDetailLoading() {
@@ -53,8 +52,10 @@ function updateRegisterButtonState(campaign, remainingSlots) {
   const registerBtn = document.getElementById("btn-register-campaign");
   if (!registerBtn) return;
 
-  const deadlineDate = new Date(campaign.registration_deadline);
-  const isExpired = !isNaN(deadlineDate.getTime()) && deadlineDate < new Date();
+  const deadlineDate = typeof parseApiDate === "function"
+    ? parseApiDate(campaign.registration_deadline)
+    : new Date(campaign.registration_deadline);
+  const isExpired = deadlineDate && !isNaN(deadlineDate.getTime()) && deadlineDate < new Date();
 
   if (hasRegisteredInSession) {
     registerBtn.disabled = true;
@@ -103,13 +104,13 @@ function renderOrganizerSidebar(campaign) {
   if (st === "PENDING") {
     html += `<div style="padding: 10px 12px; border-radius: 10px; background: #fffbeb; border: 1px solid #fde68a; color: #b45309; font-size: 0.85rem;">Chiến dịch đang chờ Quản trị viên phê duyệt.</div>`;
   }
-  if (st === "OPEN") {
+  if (["OPEN", "CLOSED"].includes(st)) {
     html += `<a href="organizer-dashboard.html?tab=attendance&campaign_id=${id}" class="btn btn-primary btn-block" style="text-align:center;">Mở Trạm Điểm danh</a>`;
   }
   if (["OPEN", "CLOSED", "COMPLETED"].includes(st)) {
     html += `<a href="organizer-dashboard.html?tab=volunteers&campaign_id=${id}" class="btn btn-outline btn-block" style="text-align:center;">Xem &amp; Duyệt đơn TNV</a>`;
   }
-  if (st === "COMPLETED" || st === "CLOSED") {
+  if (st === "COMPLETED") {
     html += `<a href="organizer-dashboard.html?tab=certificates" class="btn btn-outline btn-block" style="text-align:center;">Cấp chứng chỉ</a>`;
   }
   if (!["COMPLETED", "CANCELLED"].includes(st)) {
@@ -136,23 +137,34 @@ function renderOrganizerSidebar(campaign) {
 
   const cancelBtn = document.getElementById("orgDetailCancelBtn");
   if (cancelBtn) {
-    cancelBtn.addEventListener("click", async () => {
-      const reason = window.prompt("Nhập lý do hủy chiến dịch:", st === "DRAFT" ? "Hủy bản nháp" : "");
-      if (reason === null) return;
-      const trimmed = reason.trim();
-      if (!trimmed) {
-        if (typeof showToast === "function") showToast("Vui lòng nhập lý do hủy chiến dịch.", "warning");
-        return;
+    cancelBtn.addEventListener("click", () => {
+      const reasonInput = document.getElementById("cancelCampaignReasonInput");
+      if (reasonInput) {
+        reasonInput.value = st === "DRAFT" ? "Hủy bản nháp" : "";
       }
-      cancelBtn.disabled = true;
-      try {
-        await api.patch(`/campaigns/${id}/cancel`, { reason: trimmed });
-        if (typeof showToast === "function") showToast("Đã hủy chiến dịch.", "success");
-        await loadCampaignDetail();
-      } catch (err) {
-        if (typeof showToast === "function") showToast(Layout.extractApiErrorMessage(err, "Không thể hủy chiến dịch."), "error");
-        cancelBtn.disabled = false;
+      const confirmBtn = document.getElementById("confirmCancelCampaignDetailBtn");
+      if (confirmBtn) {
+        confirmBtn.disabled = false;
+        confirmBtn.onclick = async () => {
+          const trimmed = (reasonInput?.value || "").trim();
+          if (!trimmed) {
+            if (typeof showToast === "function") showToast("Vui lòng nhập lý do hủy chiến dịch.", "warning");
+            reasonInput?.focus();
+            return;
+          }
+          confirmBtn.disabled = true;
+          try {
+            await api.patch(`/campaigns/${id}/cancel`, { reason: trimmed });
+            closeModal("cancelCampaignDetailModal");
+            if (typeof showToast === "function") showToast("Đã hủy chiến dịch.", "success");
+            await loadCampaignDetail();
+          } catch (err) {
+            if (typeof showToast === "function") showToast(Layout.extractApiErrorMessage(err, "Không thể hủy chiến dịch."), "error");
+            confirmBtn.disabled = false;
+          }
+        };
       }
+      openModal("cancelCampaignDetailModal");
     });
   }
 }
@@ -193,7 +205,7 @@ function renderReadOnlySidebar(campaign) {
     card.appendChild(actionsWrap);
   }
 
-  const statusInfo = Layout.CAMPAIGN_DETAIL_STATUS_MAP[campaign?.status] || {
+  const statusInfo = Layout.getCampaignStatusInfo(campaign, true) || {
     label: campaign?.status || "Đang cập nhật",
     cls: "badge-primary",
   };
@@ -215,7 +227,7 @@ function renderCampaignDetail(campaign, options = {}) {
   if (statusBox) statusBox.style.display = "none";
   if (detailContent) detailContent.style.display = "";
 
-  const statusInfo = Layout.CAMPAIGN_DETAIL_STATUS_MAP[campaign.status] || {
+  const statusInfo = Layout.getCampaignStatusInfo(campaign, true) || {
     label: campaign.status || "Đang cập nhật",
     cls: "badge-primary",
   };
@@ -233,10 +245,10 @@ function renderCampaignDetail(campaign, options = {}) {
   setText("detail-organization", campaign.organization?.name || "Tổ chức xã hội");
   setText("detail-location", campaign.location || "Đang cập nhật");
   setText("sidebar-location", campaign.location || "Đang cập nhật");
-  setText("detail-start-time", safeFormatDateTime(campaign.start_time));
-  setText("detail-end-time", safeFormatDateTime(campaign.end_time));
-  setText("detail-deadline", safeFormatDateTime(campaign.registration_deadline));
-  setText("sidebar-deadline", safeFormatDateTime(campaign.registration_deadline));
+  setText("detail-start-time", formatCampaignDateTime(campaign.start_time));
+  setText("detail-end-time", formatCampaignDateTime(campaign.end_time));
+  setText("detail-deadline", formatCampaignDateTime(campaign.registration_deadline));
+  setText("sidebar-deadline", formatCampaignDateTime(campaign.registration_deadline));
   setText(
     "detail-hours",
     campaign.estimated_hours != null ? `${Number(campaign.estimated_hours)} giờ` : "Đang cập nhật"
@@ -301,6 +313,15 @@ async function loadCampaignDetail() {
   showDetailLoading();
 
   const currentUser = typeof Auth !== "undefined" ? Auth.getUser() : null;
+  if (currentUser?.role === "ADMIN") {
+    try {
+      const adminRes = await api.get(`/admin/campaigns/${encodeURIComponent(campaignId)}`);
+      renderCampaignDetail(adminRes.data);
+      return;
+    } catch {
+      // Fallback sang endpoint công khai nếu lỗi
+    }
+  }
   if (currentUser?.role === "ORGANIZER") {
     try {
       const [mineRes, orgRes] = await Promise.all([

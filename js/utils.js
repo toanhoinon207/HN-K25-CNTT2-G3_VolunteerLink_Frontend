@@ -12,11 +12,55 @@ function formatMoney(value) {
   return Number(value).toLocaleString("vi-VN") + " ₫";
 }
 
-// "2026-11-04T09:30:00" -> "09:30 4/11/2026"
+// Chuẩn hóa chuỗi ngày giờ từ API (mặc định +07:00 nếu thiếu múi giờ)
+function parseApiDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
+  const str = String(value).trim().replace(" ", "T");
+  if (!str) return null;
+  const normalized = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(str) ? str : `${str}+07:00`;
+  const d = new Date(normalized);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// "2026-11-04T09:30:00" -> "09:30 AM 4/11/2026"
 function formatDateTime(value) {
-  const d = new Date(value);
-  return d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) + " " +
+  const d = parseApiDate(value);
+  if (!d) return "--";
+  return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true }) + " " +
     d.toLocaleDateString("vi-VN");
+}
+
+function safeFormatDateTime(value, fallback = "--") {
+  const d = parseApiDate(value);
+  if (!d) return fallback;
+  return formatDateTime(d);
+}
+
+function isSafeHttpUrl(url) {
+  const raw = String(url || "").trim();
+  if (!raw) return false;
+  try {
+    const parsed = new URL(raw, window.location.origin);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function extractApiError(error, fallback = "Đã xảy ra lỗi khi kết nối máy chủ.") {
+  const detail = error?.response?.data?.detail;
+  if (typeof detail === "string" && detail.trim()) return detail;
+  if (Array.isArray(detail) && detail.length > 0) {
+    return detail.map((item) => item.msg || "Dữ liệu không hợp lệ").join("; ");
+  }
+  if (error?.code === "ECONNABORTED") {
+    return "Quá thời gian kết nối tới máy chủ Backend.";
+  }
+  if (!error?.response) {
+    return "Không thể kết nối tới Backend. Vui lòng kiểm tra server đã bật chưa.";
+  }
+  return fallback || `Lỗi máy chủ (HTTP ${error.response.status}).`;
 }
 
 // Hiện thông báo Toast nổi ở góc màn hình. type: "success" | "error" | "warning" | "info"
@@ -152,4 +196,156 @@ function openAvatarPreviewModal(avatarUrl, displayName = "Ảnh đại diện") 
   if (titleEl) titleEl.textContent = displayName ? `Ảnh đại diện — ${displayName}` : "Ảnh đại diện";
   if (imgEl) imgEl.src = resolved;
   modal.classList.add("open");
+}
+
+/* ---------- Unified Modal Helper (dùng chung cho mọi trang & dashboard) ---------- */
+const VLModal = (() => {
+  const openerMap = new Map();
+  const closeHooks = new Map();
+  let initialized = false;
+
+  function ensureListeners() {
+    if (initialized) return;
+    initialized = true;
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      const openModals = document.querySelectorAll(".dash-modal-backdrop.open");
+      const topModal = openModals[openModals.length - 1];
+      if (topModal && topModal.id) {
+        close(topModal.id);
+      }
+    });
+
+    document.addEventListener("click", (e) => {
+      const target = e.target;
+      if (target && target.classList?.contains("dash-modal-backdrop") && target.classList.contains("open") && target.id) {
+        close(target.id);
+      }
+    });
+  }
+
+  function open(modalId) {
+    ensureListeners();
+    const modal = document.getElementById(modalId);
+    if (!modal) return;
+    const active = document.activeElement;
+    if (active && active instanceof HTMLElement && !modal.contains(active)) {
+      openerMap.set(modalId, active);
+    }
+    modal.classList.add("open");
+    const focusable = modal.querySelector(
+      "input:not([type='hidden']):not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex='-1'])"
+    );
+    if (focusable && typeof focusable.focus === "function") {
+      requestAnimationFrame(() => focusable.focus());
+    }
+  }
+
+  function close(modalId) {
+    const modal = document.getElementById(modalId);
+    if (!modal) return;
+    modal.classList.remove("open");
+
+    const hook = closeHooks.get(modalId);
+    if (typeof hook === "function") hook(modalId);
+
+    const opener = openerMap.get(modalId);
+    openerMap.delete(modalId);
+    if (opener && document.contains(opener) && typeof opener.focus === "function") {
+      opener.focus();
+    }
+  }
+
+  function onClose(modalId, handler) {
+    if (modalId && typeof handler === "function") {
+      closeHooks.set(modalId, handler);
+    }
+  }
+
+  function confirm({ title = "Xác nhận thao tác", message = "Bạn có chắc chắn muốn thực hiện?", confirmText = "Xác nhận", cancelText = "Hủy", danger = false } = {}) {
+    return new Promise((resolve) => {
+      let modal = document.getElementById("vlConfirmModal");
+      if (!modal) {
+        modal = document.createElement("div");
+        modal.id = "vlConfirmModal";
+        modal.className = "dash-modal-backdrop";
+        modal.setAttribute("role", "dialog");
+        modal.setAttribute("aria-modal", "true");
+        modal.setAttribute("aria-labelledby", "vlConfirmModalTitle");
+        modal.innerHTML = `
+          <div class="dash-modal" style="max-width: 440px;">
+            <div class="dash-modal-header">
+              <h3 id="vlConfirmModalTitle"></h3>
+              <button type="button" class="dash-modal-close" id="vlConfirmCloseBtn" aria-label="Đóng hộp thoại">&times;</button>
+            </div>
+            <div class="dash-modal-body">
+              <p id="vlConfirmModalMessage" style="margin: 0;"></p>
+            </div>
+            <div class="dash-modal-footer">
+              <button type="button" class="btn btn-outline" id="vlConfirmCancelBtn"></button>
+              <button type="button" class="btn" id="vlConfirmOkBtn"></button>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(modal);
+      }
+
+      const titleEl = modal.querySelector("#vlConfirmModalTitle");
+      const msgEl = modal.querySelector("#vlConfirmModalMessage");
+      const cancelBtn = modal.querySelector("#vlConfirmCancelBtn");
+      const okBtn = modal.querySelector("#vlConfirmOkBtn");
+      const closeBtn = modal.querySelector("#vlConfirmCloseBtn");
+
+      if (titleEl) titleEl.textContent = title;
+      if (msgEl) msgEl.textContent = message;
+      if (cancelBtn) cancelBtn.textContent = cancelText;
+      if (okBtn) {
+        okBtn.textContent = confirmText;
+        okBtn.className = danger ? "btn btn-danger" : "btn btn-primary";
+      }
+
+      let settled = false;
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
+        closeHooks.delete("vlConfirmModal");
+        close("vlConfirmModal");
+        resolve(result);
+      };
+
+      onClose("vlConfirmModal", () => {
+        if (!settled) {
+          settled = true;
+          closeHooks.delete("vlConfirmModal");
+          resolve(false);
+        }
+      });
+
+      if (okBtn) okBtn.onclick = () => finish(true);
+      if (cancelBtn) cancelBtn.onclick = () => finish(false);
+      if (closeBtn) closeBtn.onclick = () => finish(false);
+
+      open("vlConfirmModal");
+    });
+  }
+
+  return { open, close, onClose, confirm };
+})();
+
+window.VLModal = VLModal;
+window.openModal = (modalId) => VLModal.open(modalId);
+window.closeModal = (modalId) => VLModal.close(modalId);
+
+function setRefreshSpin(btn, spinning) {
+  if (!btn) return;
+  btn.classList.toggle("is-spinning", Boolean(spinning));
+  btn.disabled = Boolean(spinning);
+}
+
+async function waitMinSpin(startedAt, minMs = 450) {
+  const waitMs = Math.max(0, minMs - (Date.now() - startedAt));
+  if (waitMs > 0) {
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+  }
 }

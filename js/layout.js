@@ -25,6 +25,37 @@ const Layout = {
     CANCELLED: { label: "Đã hủy", cls: "badge-danger" },
   },
 
+  // Presentation-only status. Raw DB status remains the source for permissions.
+  getCampaignDisplayStatus(campaign) {
+    if (!campaign) return "DRAFT";
+    if (["DRAFT", "PENDING", "CANCELLED", "COMPLETED"].includes(campaign.status)) return campaign.status;
+    const toVnDate = (value) => {
+      if (!value) return null;
+      const str = String(value).replace(" ", "T");
+      return new Date(/(?:Z|[+-]\d{2}:?\d{2})$/.test(str) ? str : `${str}+07:00`);
+    };
+    // Recompute on the client so a page left open also changes label at the boundary.
+    const now = Date.now();
+    const end = toVnDate(campaign.end_time);
+    const start = toVnDate(campaign.start_time);
+    const deadline = toVnDate(campaign.registration_deadline);
+    if (end && now >= end.getTime()) return "COMPLETED";
+    if (start && now >= start.getTime()) return "IN_PROGRESS";
+    if (campaign.status === "CLOSED" || (deadline && now >= deadline.getTime())) return "REGISTRATION_CLOSED";
+    return "REGISTRATION_OPEN";
+  },
+
+  getCampaignStatusInfo(campaign, detail = false) {
+    const key = this.getCampaignDisplayStatus(campaign);
+    const derived = {
+      IN_PROGRESS: { label: "Đang diễn ra", cls: "badge-success" },
+      REGISTRATION_CLOSED: { label: "Đã đóng đăng ký", cls: "badge-warning" },
+      REGISTRATION_OPEN: { label: "Đang mở đăng ký", cls: "badge-success" },
+    };
+    return derived[key] || (detail ? this.CAMPAIGN_DETAIL_STATUS_MAP : this.CAMPAIGN_STATUS_MAP)[key] ||
+      { label: key, cls: "badge-info" };
+  },
+
   ROLE_LABELS: {
     USER: "Tình nguyện viên",
     ORGANIZER: "Nhà tổ chức",
@@ -37,7 +68,7 @@ const Layout = {
       headerEl.innerHTML = `
         <div class="khung-a-header-inner">
           <a href="home.html" class="brand-logo">
-            <div class="brand-logo-icon">
+            <div class="brand-logo-icon" aria-hidden="true">
               <svg class="svg-icon" viewBox="0 0 24 24">
                 <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 3.5 1 9.2-1.3 7.3-6.5 8.8-9 8.8Z"/>
                 <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/>
@@ -45,18 +76,47 @@ const Layout = {
             </div>
             <span>Volunteer<span class="brand-accent">Link</span></span>
           </a>
-          <nav id="headerAuthNav" class="header-nav"></nav>
+          <nav id="headerAuthNav" class="header-nav" aria-label="Tài khoản"></nav>
         </div>
       `;
     }
 
     const footerEl = document.getElementById("app-footer");
     if (footerEl) {
+      footerEl.classList.add("khung-a-footer--full");
       footerEl.innerHTML = `
-        <div class="footer-inner">
-          <div>
-            <strong>VolunteerLink</strong> &copy; 2026 - Nền tảng kết nối tình nguyện cộng đồng
+        <div class="footer-inner footer-grid">
+          <div class="footer-brand-col">
+            <a href="home.html" class="brand-logo footer-brand-logo">
+              <div class="brand-logo-icon" aria-hidden="true">
+                <svg class="svg-icon" viewBox="0 0 24 24">
+                  <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 3.5 1 9.2-1.3 7.3-6.5 8.8-9 8.8Z"/>
+                  <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/>
+                </svg>
+              </div>
+              <span>Volunteer<span class="brand-accent">Link</span></span>
+            </a>
+            <p class="footer-tagline">Nền tảng kết nối tình nguyện viên với các tổ chức xã hội minh bạch, xác thực giờ đóng góp và chứng nhận điện tử.</p>
           </div>
+          <div class="footer-links-col">
+            <h3 class="footer-col-title">Khám phá</h3>
+            <ul class="footer-links-list">
+              <li><a href="home.html">Trang chủ</a></li>
+              <li><a href="campaign.html">Tìm kiếm chiến dịch</a></li>
+              <li><a href="campaign.html?status=OPEN">Chiến dịch đang mở</a></li>
+            </ul>
+          </div>
+          <div class="footer-links-col">
+            <h3 class="footer-col-title">Tham gia</h3>
+            <ul class="footer-links-list">
+              <li><a href="login.html">Đăng nhập</a></li>
+              <li><a href="register.html">Đăng ký tình nguyện viên</a></li>
+              <li><a href="register.html">Đăng ký tổ chức điều phối</a></li>
+            </ul>
+          </div>
+        </div>
+        <div class="footer-bottom">
+          <span><strong>VolunteerLink</strong> &copy; 2026 - Nền tảng kết nối tình nguyện cộng đồng</span>
         </div>
       `;
     }
@@ -193,24 +253,15 @@ const Layout = {
     const logoutBtn = document.getElementById(logoutBtnId);
     if (logoutBtn) {
       logoutBtn.addEventListener("click", async () => {
-        try {
-          if (typeof api !== "undefined") await api.post("/auth/logout");
-        } catch {
-          // Vẫn xóa session cục bộ nếu token đã hết hạn
-        }
-        Auth.clearSession();
-        this.renderHeaderAuth(logoutBtnId);
-        if (typeof showToast === "function") {
-          showToast("Đã đăng xuất tài khoản!", "info");
-        }
+        if (!(await Auth.confirmLogout())) return;
+        Auth.logout();
       });
     }
   },
 
   formatNotificationTime(value) {
-    if (!value) return "";
-    const d = new Date(value);
-    if (isNaN(d.getTime())) return "";
+    const d = typeof parseApiDate === "function" ? parseApiDate(value) : new Date(value);
+    if (!d || isNaN(d.getTime())) return "";
     const hh = String(d.getHours()).padStart(2, "0");
     const mm = String(d.getMinutes()).padStart(2, "0");
     const dd = String(d.getDate()).padStart(2, "0");
@@ -243,11 +294,19 @@ const Layout = {
     if (campaignMatch) {
       const campId = campaignMatch[1];
       mapped = `campaign_detail.html?id=${campId}`;
+    } else if (/^\/?pages\/my-registrations\.html/i.test(mapped)) {
+      mapped = "user-dashboard.html?tab=overview";
+    } else if (/^\/?pages\/certificates\.html/i.test(mapped)) {
+      mapped = "user-dashboard.html?tab=certificates";
     } else if (/^\/?pages\//i.test(mapped)) {
       mapped = mapped.replace(/^\/?pages\//i, "");
     } else if (/^\/index\.html/i.test(mapped)) {
       mapped = mapped.replace(/^\//, "");
     }
+    mapped = mapped
+      .replace(/([?&])tab=registrations\b/i, "$1tab=volunteers")
+      .replace(/([?&])tab=hours\b/i, "$1tab=certificates")
+      .replace(/([?&])tab=(?:hour-appeals|attendance-appeals)\b/i, "$1tab=appeals");
 
     const inPages = window.location.pathname.includes("/pages/");
     if (!/^https?:\/\//i.test(mapped) && !mapped.startsWith("/")) {
@@ -315,7 +374,7 @@ const Layout = {
                   <span class="vl-notif-item-title">${escapeHtml(n.title || "Thông báo")}</span>
                   <span class="vl-notif-item-time">${timeStr}</span>
                 </div>
-                <div class="vl-notif-item-msg">${escapeHtml(n.message || "")}</div>
+                <div class="vl-notif-item-msg">${escapeHtml(n.content || n.message || "")}</div>
                 <span class="vl-notif-tag">${escapeHtml(roleTag)}</span>
               </div>
             </button>
@@ -414,6 +473,11 @@ const Layout = {
     }
 
     fetchUnreadCount();
+    // One timer per header; avoids requiring manual refresh to receive notifications.
+    if (this.notificationPollTimer) clearInterval(this.notificationPollTimer);
+    this.notificationPollTimer = setInterval(() => {
+      if (document.visibilityState === "visible" && Auth.getToken()) fetchUnreadCount();
+    }, 30000);
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible" && Auth.getToken()) {
         fetchUnreadCount();
@@ -576,11 +640,78 @@ const Layout = {
     document.getElementById("vlNotifDetailCloseBtn")?.focus();
   },
 
-  applyFallbackImage(imgEl) {
+  getCategoryVisual(category) {
+    const raw = String(category || "").toLowerCase();
+    if (/(môi trường|sinh thái|rừng|xanh|biển)/.test(raw)) {
+      return {
+        theme: "env",
+        svg: '<svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 3.5 1 9.2-1.3 7.3-6.5 8.8-9 8.8Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>',
+      };
+    }
+    if (/(giáo dục|trẻ em|dạy học|học bổng|thư viện)/.test(raw)) {
+      return {
+        theme: "edu",
+        svg: '<svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>',
+      };
+    }
+    if (/(y tế|sức khỏe|hiến máu|bệnh viện)/.test(raw)) {
+      return {
+        theme: "health",
+        svg: '<svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>',
+      };
+    }
+    if (/(cứu trợ|khẩn cấp|thiên tai|bão lũ)/.test(raw)) {
+      return {
+        theme: "relief",
+        svg: '<svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
+      };
+    }
+    return {
+      theme: "community",
+      svg: '<svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+    };
+  },
+
+  applyCategoryCover(mediaWrap, imgEl, category) {
+    if (!mediaWrap) return;
+    const visual = this.getCategoryVisual(category);
+    mediaWrap.classList.add("is-placeholder", `is-theme-${visual.theme}`);
+    if (imgEl) imgEl.hidden = true;
+    let cover = mediaWrap.querySelector(".campaign-card-cover");
+    if (!cover) {
+      cover = document.createElement("div");
+      cover.className = "campaign-card-cover";
+      cover.setAttribute("aria-hidden", "true");
+      mediaWrap.appendChild(cover);
+    }
+    cover.innerHTML = `
+      <div class="campaign-card-cover-icon">${visual.svg}</div>
+      <span class="campaign-card-cover-label">${escapeHtml(category || "Cộng đồng")}</span>
+    `;
+  },
+
+  applyFallbackImage(imgEl, category = "") {
     if (!imgEl) return;
+    const mediaWrap = imgEl.closest(".campaign-card-media");
+    const rawSrc = imgEl.getAttribute("src") || "";
+    if (!rawSrc || rawSrc.endsWith("logo.svg")) {
+      if (mediaWrap) {
+        this.applyCategoryCover(mediaWrap, imgEl, category);
+      } else {
+        imgEl.classList.add("is-fallback");
+      }
+      return;
+    }
+    imgEl.classList.remove("is-fallback");
+    imgEl.hidden = false;
     imgEl.onerror = () => {
-      if (!imgEl.src.endsWith("logo.svg")) {
-        imgEl.src = this.DEFAULT_CAMPAIGN_IMAGE;
+      if (mediaWrap) {
+        this.applyCategoryCover(mediaWrap, imgEl, category);
+      } else {
+        imgEl.classList.add("is-fallback");
+        if (!imgEl.src.endsWith("logo.svg")) {
+          imgEl.src = this.DEFAULT_CAMPAIGN_IMAGE;
+        }
       }
     };
   },
@@ -588,40 +719,89 @@ const Layout = {
   createCampaignCard(campaign, templateEl) {
     const fragment = templateEl.content.cloneNode(true);
     const detailUrl = `campaign_detail.html?id=${encodeURIComponent(campaign.id)}`;
-    const statusInfo = this.CAMPAIGN_STATUS_MAP[campaign.status] || {
+    const statusInfo = this.getCampaignStatusInfo(campaign) || {
       label: campaign.status || "Đang cập nhật",
       cls: "badge-primary",
     };
 
     const imgEl = fragment.querySelector(".campaign-card-img");
-    imgEl.src = campaign.image_url || this.DEFAULT_CAMPAIGN_IMAGE;
-    imgEl.alt = campaign.title || "Ảnh chiến dịch tình nguyện";
-    this.applyFallbackImage(imgEl);
+    if (imgEl) {
+      if (campaign.image_url) {
+        imgEl.src = campaign.image_url;
+        imgEl.alt = campaign.title || "Ảnh chiến dịch tình nguyện";
+      } else {
+        imgEl.removeAttribute("src");
+        imgEl.alt = "";
+      }
+      this.applyFallbackImage(imgEl, campaign.category);
+    }
 
     const categoryEl = fragment.querySelector(".card-category");
-    categoryEl.textContent = campaign.category || "Cộng đồng";
+    if (categoryEl) categoryEl.textContent = campaign.category || "Cộng đồng";
 
     const statusEl = fragment.querySelector(".card-status");
-    statusEl.className = `badge ${statusInfo.cls} card-status`;
-    statusEl.textContent = statusInfo.label;
+    if (statusEl) {
+      statusEl.className = `badge ${statusInfo.cls} card-status`;
+      statusEl.textContent = statusInfo.label;
+    }
 
     const titleLinkEl = fragment.querySelector(".card-title-link");
-    titleLinkEl.href = detailUrl;
-    titleLinkEl.textContent = campaign.title || "Chiến dịch tình nguyện";
+    if (titleLinkEl) {
+      titleLinkEl.href = detailUrl;
+      titleLinkEl.textContent = campaign.title || "Chiến dịch tình nguyện";
+    }
 
     const descEl = fragment.querySelector(".campaign-card-desc");
-    descEl.textContent = campaign.description || "Chưa có mô tả chi tiết.";
+    if (descEl) descEl.textContent = campaign.description || "Chưa có mô tả chi tiết.";
 
     const locationEl = fragment.querySelector(".card-location");
-    locationEl.textContent = campaign.location || "Đang cập nhật";
+    if (locationEl) locationEl.textContent = campaign.location || "Đang cập nhật";
 
     const orgEl = fragment.querySelector(".card-org");
-    orgEl.textContent = campaign.organization?.name || "Tổ chức xã hội";
+    if (orgEl) orgEl.textContent = campaign.organization?.name || "Tổ chức xã hội";
+
+    // Hiển thị thanh tiến độ chỉ tiêu nếu payload API có max_participants hoặc max_volunteers > 0
+    const slotWrap = fragment.querySelector(".card-slot-wrap");
+    const maxVol = Number(campaign.max_participants ?? campaign.max_volunteers);
+    if (slotWrap && maxVol > 0 && (campaign.approved_count != null || campaign.remaining_slots != null)) {
+      const approved = Math.max(0, Number(campaign.approved_count ?? 0));
+      const remaining = Math.max(0, Number(campaign.remaining_slots ?? (maxVol - approved)));
+      const slotText = slotWrap.querySelector(".card-slot-text");
+      const slotProg = slotWrap.querySelector(".campaign-slot-progress");
+      if (slotText) slotText.textContent = `Còn ${remaining}/${maxVol} chỗ`;
+      if (slotProg) {
+        slotProg.max = maxVol;
+        slotProg.value = Math.min(approved, maxVol);
+      }
+      slotWrap.hidden = false;
+    }
 
     const detailBtnEl = fragment.querySelector(".card-detail-btn");
-    detailBtnEl.href = detailUrl;
+    if (detailBtnEl) detailBtnEl.href = detailUrl;
 
     return fragment;
+  },
+
+  renderSkeletonCards(container, count = 3) {
+    if (!container) return;
+    container.innerHTML = Array.from({ length: count })
+      .map(
+        () => `
+        <div class="campaign-card campaign-card-skeleton" aria-hidden="true">
+          <div class="skeleton-block skeleton-media"></div>
+          <div class="campaign-card-body">
+            <div class="skeleton-row">
+              <span class="skeleton-block skeleton-pill"></span>
+              <span class="skeleton-block skeleton-pill"></span>
+            </div>
+            <div class="skeleton-block skeleton-title"></div>
+            <div class="skeleton-block skeleton-line"></div>
+            <div class="skeleton-block skeleton-line skeleton-line--short"></div>
+            <div class="skeleton-block skeleton-btn"></div>
+          </div>
+        </div>`
+      )
+      .join("");
   },
 
   renderStateBox(container, message, modifier = "") {

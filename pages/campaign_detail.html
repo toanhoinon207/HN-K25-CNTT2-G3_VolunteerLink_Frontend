@@ -44,27 +44,45 @@
 
           <div class="detail-info-grid">
             <div class="detail-info-item">
-              <span class="detail-info-label">🏢 Tổ chức thực hiện</span>
+              <span class="detail-info-label">
+                <svg class="svg-icon svg-icon-xs" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4"/></svg>
+                Tổ chức thực hiện
+              </span>
               <span id="detail-organization" class="detail-info-value"></span>
             </div>
             <div class="detail-info-item">
-              <span class="detail-info-label">📍 Địa điểm</span>
+              <span class="detail-info-label">
+                <svg class="svg-icon svg-icon-xs" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                Địa điểm
+              </span>
               <span id="detail-location" class="detail-info-value"></span>
             </div>
             <div class="detail-info-item">
-              <span class="detail-info-label">📅 Thời gian bắt đầu</span>
+              <span class="detail-info-label">
+                <svg class="svg-icon svg-icon-xs" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                Thời gian bắt đầu
+              </span>
               <span id="detail-start-time" class="detail-info-value"></span>
             </div>
             <div class="detail-info-item">
-              <span class="detail-info-label">🏁 Thời gian kết thúc</span>
+              <span class="detail-info-label">
+                <svg class="svg-icon svg-icon-xs" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                Thời gian kết thúc
+              </span>
               <span id="detail-end-time" class="detail-info-value"></span>
             </div>
             <div class="detail-info-item">
-              <span class="detail-info-label">⏳ Hạn chót đăng ký</span>
+              <span class="detail-info-label">
+                <svg class="svg-icon svg-icon-xs" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Hạn chót đăng ký
+              </span>
               <span id="detail-deadline" class="detail-info-value"></span>
             </div>
             <div class="detail-info-item">
-              <span class="detail-info-label">⏱️ Số giờ dự kiến</span>
+              <span class="detail-info-label">
+                <svg class="svg-icon svg-icon-xs" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 8 12 12 14 14"/></svg>
+                Số giờ dự kiến
+              </span>
               <span id="detail-hours" class="detail-info-value"></span>
             </div>
           </div>
@@ -97,8 +115,14 @@
           </div>
 
           <ul class="reg-meta-list">
-            <li>📍 Địa điểm: <strong id="sidebar-location"></strong></li>
-            <li>⏳ Hạn đăng ký: <strong id="sidebar-deadline"></strong></li>
+            <li>
+              <svg class="svg-icon svg-icon-xs" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+              <span>Địa điểm: <strong id="sidebar-location"></strong></span>
+            </li>
+            <li>
+              <svg class="svg-icon svg-icon-xs" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <span>Hạn đăng ký: <strong id="sidebar-deadline"></strong></span>
+            </li>
           </ul>
 
           <button type="button" id="btn-register-campaign" class="btn btn-primary btn-lg btn-block" disabled>
@@ -110,6 +134,26 @@
   </main>
 
   <footer id="app-footer" class="khung-a-footer"></footer>
+
+  <!-- Modal Hủy Chiến Dịch (Organizer) -->
+  <div class="dash-modal-backdrop" id="cancelCampaignDetailModal" role="dialog" aria-modal="true" aria-labelledby="cancelCampaignDetailTitle">
+    <div class="dash-modal">
+      <div class="dash-modal-header">
+        <h3 id="cancelCampaignDetailTitle">Xác nhận hủy chiến dịch</h3>
+        <button type="button" class="dash-modal-close" aria-label="Đóng hộp thoại" onclick="closeModal('cancelCampaignDetailModal')">&times;</button>
+      </div>
+      <div class="dash-modal-body">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label class="form-label" for="cancelCampaignReasonInput">Lý do hủy chiến dịch <span aria-hidden="true">*</span></label>
+          <textarea id="cancelCampaignReasonInput" class="form-control" rows="3" placeholder="Nhập lý do hủy để thông báo cho các bên liên quan..."></textarea>
+        </div>
+      </div>
+      <div class="dash-modal-footer">
+        <button type="button" class="btn btn-outline" onclick="closeModal('cancelCampaignDetailModal')">Đóng</button>
+        <button type="button" class="btn btn-danger" id="confirmCancelCampaignDetailBtn">Xác nhận hủy</button>
+      </div>
+    </div>
+  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/axios@1.7.9/dist/axios.min.js"></script>
   <script src="../js/config.js"></script>

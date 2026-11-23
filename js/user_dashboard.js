@@ -17,12 +17,21 @@ let currentMyOrg = null;
 let myWaitlistEntries = [];
 let waitlistFilter = "ALL";
 let waitlistPendingAction = false;
+let profileTotalHours = null;
+let attendanceTotalHours = 0;
+
+function updateTotalHoursStat() {
+  const statHoursEl = document.getElementById("statTotalHours");
+  if (!statHoursEl) return;
+  const resolved = profileTotalHours != null ? profileTotalHours : attendanceTotalHours;
+  statHoursEl.textContent = Number(resolved || 0).toFixed(1);
+}
 
 const REG_STATUS_MAP = {
   PENDING: { label: "Đang chờ duyệt", cls: "status-pending" },
   APPROVED: { label: "Đã duyệt tham gia", cls: "status-approved" },
   REJECTED: { label: "Bị từ chối", cls: "status-rejected" },
-  CANCELLED: { label: "Đã hủy", cls: "status-closed" },
+  CANCELLED: { label: "Đã hủy", cls: "status-cancelled" },
   WAITLISTED: { label: "Trong danh sách chờ", cls: "status-pending" },
 };
 
@@ -34,28 +43,10 @@ const ATT_STATUS_MAP = {
 };
 
 const CLAIM_STATUS_MAP = {
-  PENDING: { label: "Chờ duyệt", cls: "status-pending" },
+  PENDING: { label: "Đang đợi", cls: "status-pending" },
   VERIFIED: { label: "Đã xác nhận", cls: "status-approved" },
   REJECTED: { label: "Bị từ chối", cls: "status-rejected" },
 };
-
-function extractApiError(error, fallback = "Đã xảy ra lỗi khi kết nối máy chủ.") {
-  const detail = error?.response?.data?.detail;
-  if (typeof detail === "string" && detail.trim()) return detail;
-  if (Array.isArray(detail) && detail.length > 0) {
-    return detail.map((item) => item.msg || "Dữ liệu không hợp lệ").join("; ");
-  }
-  if (error?.code === "ECONNABORTED") return "Quá thời gian kết nối tới máy chủ.";
-  if (!error?.response) return "Không thể kết nối tới Backend. Vui lòng kiểm tra server đã bật chưa.";
-  return fallback;
-}
-
-function safeFormatDateTime(value) {
-  if (!value) return "--";
-  const d = new Date(value);
-  if (isNaN(d.getTime())) return "--";
-  return typeof formatDateTime === "function" ? formatDateTime(value) : d.toLocaleString("vi-VN");
-}
 
 /* ==================== KHỞI TẠO & ĐIỀU HƯỚNG ==================== */
 
@@ -77,12 +68,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const logoutBtn = document.getElementById("logoutBtn");
   if (logoutBtn) {
     logoutBtn.addEventListener("click", async () => {
-      try {
-        await api.post("/auth/logout");
-      } catch {
-        // Vẫn xóa session cục bộ nếu token đã hết hạn
-      }
-      Auth.logout();
+      if (await Auth.confirmLogout()) Auth.logout();
     });
   }
 
@@ -135,7 +121,9 @@ function setupTabs() {
     });
   });
 
-  const initialTab = new URLSearchParams(window.location.search).get("tab");
+  const rawTab = new URLSearchParams(window.location.search).get("tab");
+  const tabAlias = { hours: "certificates" };
+  const initialTab = tabAlias[rawTab] || rawTab;
   if (initialTab && document.getElementById("tab-" + initialTab)) {
     switchUserTab(initialTab);
   }
@@ -211,7 +199,8 @@ const WL_STATUS = {
 
 function waitlistDeadlineMs(value) {
   if (!value) return NaN;
-  // Backend stores Vietnamese local wall time without timezone.
+  const d = typeof parseApiDate === "function" ? parseApiDate(value) : null;
+  if (d) return d.getTime();
   const normalized = String(value).replace(" ", "T");
   return new Date(/[Zz]|[+-]\d{2}:\d{2}$/.test(normalized) ? normalized : normalized + "+07:00").getTime();
 }
@@ -228,7 +217,7 @@ function isActiveWaitlistInvite(e) {
 }
 
 function setupMyWaitlist() {
-  document.getElementById("refreshMyWaitlistBtn")?.addEventListener("click", loadMyWaitlist);
+  document.getElementById("refreshMyWaitlistBtn")?.addEventListener("click", () => loadMyWaitlist(true));
   document.querySelectorAll("[data-wl-filter]").forEach((btn) => btn.addEventListener("click", () => {
     waitlistFilter = btn.dataset.wlFilter;
     document.querySelectorAll("[data-wl-filter]").forEach((b) => b.classList.toggle("active", b === btn));
@@ -254,16 +243,37 @@ function setupMyWaitlist() {
   }, 1000);
 }
 
-async function loadMyWaitlist() {
+async function loadMyWaitlist(manual = false) {
+  const tbody = document.getElementById("myWaitlistTbody");
+  const refreshBtn = document.getElementById("refreshMyWaitlistBtn");
+  const hasRows = tbody && tbody.children.length > 0 && !tbody.querySelector("td[colspan]");
+  const startedAt = Date.now();
+  if (tbody && hasRows) tbody.classList.add("is-refreshing");
+  if (refreshBtn) {
+    refreshBtn.classList.add("is-spinning");
+    refreshBtn.disabled = true;
+  }
   try {
     const response = await api.get("/waitlist/mine");
+    if (manual) {
+      const waitMs = Math.max(0, 450 - (Date.now() - startedAt));
+      if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs));
+    }
     myWaitlistEntries = Array.isArray(response.data) ? response.data : [];
     renderMyWaitlist();
+    if (manual && typeof showToast === "function") {
+      showToast("Đã cập nhật danh sách chờ.", "success");
+    }
   } catch (error) {
     myWaitlistEntries = [];
     renderMyWaitlist();
-    const tbody = document.getElementById("myWaitlistTbody");
     if (tbody) tbody.innerHTML = `<tr><td colspan="5">${escapeHtml(extractApiError(error, "Không tải được danh sách chờ."))}</td></tr>`;
+  } finally {
+    if (tbody) tbody.classList.remove("is-refreshing");
+    if (refreshBtn) {
+      refreshBtn.classList.remove("is-spinning");
+      refreshBtn.disabled = false;
+    }
   }
 }
 
@@ -307,9 +317,19 @@ function renderMyWaitlist() {
 }
 
 async function leaveMyWaitlist(campaignId) {
-  const registration = cachedRegistrations.find(r => String(r.campaign_id) === String(campaignId) && r.status === "WAITLISTED");
+  let registration = cachedRegistrations.find(r => String(r.campaign_id) === String(campaignId) && r.status === "WAITLISTED");
+  if (!registration) {
+    await loadMyRegistrations();
+    registration = cachedRegistrations.find(r => String(r.campaign_id) === String(campaignId) && r.status === "WAITLISTED");
+  }
   if (!registration) { showToast("Không tìm thấy đơn đang chờ. Hãy tải lại trang.", "error"); return; }
-  if (!window.confirm("Bạn muốn rời danh sách chờ của chiến dịch này?")) return;
+  const ok = await VLModal.confirm({
+    title: "Rời danh sách chờ",
+    message: "Bạn muốn rời danh sách chờ của chiến dịch này?",
+    confirmText: "Rời hàng chờ",
+    danger: true,
+  });
+  if (!ok) return;
   await cancelMyRegistration(registration.id);
 }
 
@@ -317,7 +337,15 @@ async function respondMyWaitlist(entryId, response) {
   if (waitlistPendingAction) return;
   const entry = myWaitlistEntries.find((e) => String(e.id) === String(entryId));
   if (!entry || !isActiveWaitlistInvite(entry)) return;
-  if (response === "DECLINED" && !window.confirm("Bạn có chắc muốn từ chối suất tham gia này?")) return;
+  if (response === "DECLINED") {
+    const ok = await VLModal.confirm({
+      title: "Từ chối suất tham gia",
+      message: "Bạn có chắc muốn từ chối suất tham gia này? Suất sẽ được chuyển cho người tiếp theo.",
+      confirmText: "Từ chối suất",
+      danger: true,
+    });
+    if (!ok) return;
+  }
   waitlistPendingAction = true;
   renderMyWaitlist();
   try {
@@ -335,20 +363,39 @@ async function respondMyWaitlist(entryId, response) {
 
 /* ==================== TAB 1: TỔNG QUAN & ĐƠN ĐĂNG KÝ ==================== */
 
-async function loadMyRegistrations() {
+async function loadMyRegistrations(manual = false) {
   const tbody = document.getElementById("myRegistrationsTbody");
   if (!tbody) return;
+  const refreshBtn = document.getElementById("refreshMyRegsBtn");
+  const hasRows = tbody.children.length > 0 && !tbody.querySelector("td[colspan]");
+  const startedAt = Date.now();
 
-  tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted);">Đang tải danh sách đăng ký...</td></tr>`;
+  if (hasRows) {
+    tbody.classList.add("is-refreshing");
+  } else {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted);">Đang tải danh sách đăng ký...</td></tr>`;
+  }
+  if (refreshBtn) {
+    refreshBtn.classList.add("is-spinning");
+    refreshBtn.disabled = true;
+  }
 
   try {
     const res = await api.get("/registrations/me");
+    if (manual) {
+      const waitMs = Math.max(0, 450 - (Date.now() - startedAt));
+      if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs));
+    }
     cachedRegistrations = Array.isArray(res.data) ? res.data : [];
 
     const countEl = document.getElementById("myRegsCountBadge");
     const statEl = document.getElementById("statRegistered");
+    const approvedEl = document.getElementById("statApprovedRegs");
     if (countEl) countEl.textContent = String(cachedRegistrations.length);
     if (statEl) statEl.textContent = String(cachedRegistrations.length);
+    if (approvedEl) {
+      approvedEl.textContent = String(cachedRegistrations.filter((r) => r.status === "APPROVED").length);
+    }
 
     populateCampaignSelects(cachedRegistrations);
 
@@ -364,7 +411,7 @@ async function loadMyRegistrations() {
         if (reg.status === "APPROVED") {
           actionHtml = `<button type="button" class="btn-action btn-action-primary" onclick="goToAttendance(${Number(reg.campaign_id)})">Điểm danh</button>`;
         } else if (reg.status === "PENDING" || reg.status === "WAITLISTED") {
-          actionHtml = `<button type="button" class="btn-action" onclick="cancelMyRegistration(${Number(reg.id)})">${reg.status === "WAITLISTED" ? "Rời hàng chờ" : "Hủy đơn"}</button>`;
+          actionHtml = `<button type="button" class="btn-action btn-action-danger" onclick="cancelMyRegistration(${Number(reg.id)})">${reg.status === "WAITLISTED" ? "Rời hàng chờ" : "Hủy đơn"}</button>`;
         }
 
         return `
@@ -381,14 +428,27 @@ async function loadMyRegistrations() {
         `;
       })
       .join("");
+    if (manual && typeof showToast === "function") {
+      showToast("Đã cập nhật danh sách ca đăng ký.", "success");
+    }
   } catch (error) {
     const msg = extractApiError(error, "Không thể tải danh sách đăng ký.");
-    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--danger);">${escapeHtml(msg)}</td></tr>`;
+    if (!hasRows) {
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--danger);">${escapeHtml(msg)}</td></tr>`;
+    } else if (typeof showToast === "function") {
+      showToast(msg, "error");
+    }
+  } finally {
+    tbody.classList.remove("is-refreshing");
+    if (refreshBtn) {
+      refreshBtn.classList.remove("is-spinning");
+      refreshBtn.disabled = false;
+    }
   }
 }
 
-function renderMyRegistrations() {
-  return loadMyRegistrations();
+function renderMyRegistrations(manual = false) {
+  return loadMyRegistrations(manual);
 }
 
 async function cancelMyRegistration(registrationId) {
@@ -503,16 +563,21 @@ async function submitAttendance(action) {
 async function loadMyAttendanceHistory() {
   const tbody = document.getElementById("attendanceHistoryTbody");
   if (!tbody) return;
+  const hasRows = tbody.children.length > 0 && !tbody.querySelector("td[colspan]");
 
-  tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-muted);">Đang tải lịch sử điểm danh...</td></tr>`;
+  if (hasRows) {
+    tbody.classList.add("is-refreshing");
+  } else {
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-muted);">Đang tải lịch sử điểm danh...</td></tr>`;
+  }
 
   try {
     const res = await api.get("/attendances/my-history");
     const items = Array.isArray(res.data) ? res.data : [];
 
     const totalMinutes = items.reduce((sum, item) => sum + Number(item.total_minutes || 0), 0);
-    const statHoursEl = document.getElementById("statTotalHours");
-    if (statHoursEl) statHoursEl.textContent = (totalMinutes / 60).toFixed(1);
+    attendanceTotalHours = totalMinutes / 60;
+    updateTotalHoursStat();
 
     if (items.length === 0) {
       tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-muted);">Chưa có lịch sử điểm danh.</td></tr>`;
@@ -538,7 +603,13 @@ async function loadMyAttendanceHistory() {
       .join("");
   } catch (error) {
     const msg = extractApiError(error, "Không thể tải lịch sử điểm danh.");
-    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--danger);">${escapeHtml(msg)}</td></tr>`;
+    if (!hasRows) {
+      tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--danger);">${escapeHtml(msg)}</td></tr>`;
+    } else if (typeof showToast === "function") {
+      showToast(msg, "error");
+    }
+  } finally {
+    tbody.classList.remove("is-refreshing");
   }
 }
 
@@ -592,8 +663,8 @@ function renderCertificates() {
     if (sortBy === "MOST_HOURS") {
       return Number(b.total_hours || 0) - Number(a.total_hours || 0);
     }
-    const timeA = new Date(a.issued_at || 0).getTime();
-    const timeB = new Date(b.issued_at || 0).getTime();
+    const timeA = (typeof parseApiDate === "function" ? parseApiDate(a.issued_at) : new Date(a.issued_at || 0))?.getTime() || 0;
+    const timeB = (typeof parseApiDate === "function" ? parseApiDate(b.issued_at) : new Date(b.issued_at || 0))?.getTime() || 0;
     return sortBy === "OLDEST" ? timeA - timeB : timeB - timeA;
   });
 
@@ -681,18 +752,40 @@ async function loadCertificates() {
   }
 }
 
-async function loadHourClaims() {
+async function loadHourClaims(manual = false) {
   const tbody = document.getElementById("claimsTbody");
   if (!tbody) return;
+  const refreshBtn = document.getElementById("refreshHourClaimsBtn");
+  const hasRows = tbody.children.length > 0 && !tbody.querySelector("td[colspan]");
+  const startedAt = Date.now();
 
-  tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-muted);">Đang tải lịch sử khiếu nại...</td></tr>`;
+  if (hasRows) {
+    tbody.classList.add("is-refreshing");
+  } else {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">Đang tải lịch sử khiếu nại...</td></tr>`;
+  }
+  if (refreshBtn) {
+    refreshBtn.classList.add("is-spinning");
+    refreshBtn.disabled = true;
+  }
+
+  const appealStatusMap = {
+    PENDING: { label: "Chờ Admin xử lý", cls: "status-pending" },
+    ACCEPTED: { label: "Admin đã chấp nhận", cls: "status-approved" },
+    APPROVED: { label: "Admin đã chấp nhận", cls: "status-approved" },
+    REJECTED: { label: "Admin từ chối", cls: "status-rejected" },
+  };
 
   try {
     const res = await api.get("/hour-claims");
+    if (manual) {
+      const waitMs = Math.max(0, 450 - (Date.now() - startedAt));
+      if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs));
+    }
     const claims = Array.isArray(res.data) ? res.data : [];
 
     if (claims.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-muted);">Chưa có yêu cầu khiếu nại giờ nào.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">Chưa có yêu cầu khiếu nại giờ nào.</td></tr>`;
       return;
     }
 
@@ -702,45 +795,80 @@ async function loadHourClaims() {
 
     tbody.innerHTML = claims
       .map((cl) => {
-        const st = CLAIM_STATUS_MAP[cl.status] || { label: cl.status, cls: "status-closed" };
+        const st = cl.appeal_status
+          ? appealStatusMap[cl.appeal_status] || { label: cl.appeal_status, cls: "status-closed" }
+          : CLAIM_STATUS_MAP[cl.status] || { label: cl.status, cls: "status-closed" };
         const title = regTitleMap.get(cl.registration_id) || `Đơn đăng ký #${cl.registration_id}`;
+        const canAppealToAdmin =
+          !cl.appeal_status &&
+          (cl.status === "REJECTED" ||
+            (cl.status === "VERIFIED" && Number(cl.approved_hours || 0) < Number(cl.claimed_hours || 0)));
+        const actionHtml = canAppealToAdmin
+          ? `<button type="button" class="btn-action btn-action-primary" onclick="appealHourClaim(${Number(cl.id)})">Khiếu nại lên Admin</button>`
+          : `<span style="color:var(--text-muted);">—</span>`;
+
         return `
           <tr>
             <td class="td-title">${escapeHtml(title)}</td>
             <td><strong>+${Number(cl.claimed_hours || 0)}h</strong></td>
             <td style="color:var(--text-muted);">${escapeHtml(cl.note || cl.rejection_reason || "—")}</td>
-            <td><span class="status-pill ${st.cls}">${escapeHtml(st.label)}</span>
-              ${cl.status === "REJECTED" && !cl.appeal_status ? `<button type="button" class="btn-action" onclick="appealHourClaim(${Number(cl.id)})">Gửi khiếu nại</button>` : ""}
-              ${cl.appeal_status ? `<div class="td-subtitle">Khiếu nại: ${escapeHtml(cl.appeal_status)}</div>` : ""}
-            </td>
+            <td><span class="status-pill ${st.cls}">${escapeHtml(st.label)}</span></td>
+            <td>${actionHtml}</td>
           </tr>
         `;
       })
       .join("");
+    if (manual && typeof showToast === "function") {
+      showToast("Đã cập nhật lịch sử khiếu nại giờ.", "success");
+    }
   } catch (error) {
-    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--danger);">${escapeHtml(extractApiError(error, "Không thể tải khiếu nại giờ."))}</td></tr>`;
+    const msg = extractApiError(error, "Không thể tải khiếu nại giờ.");
+    if (!hasRows) {
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--danger);">${escapeHtml(msg)}</td></tr>`;
+    } else if (typeof showToast === "function") {
+      showToast(msg, "error");
+    }
+  } finally {
+    tbody.classList.remove("is-refreshing");
+    if (refreshBtn) {
+      refreshBtn.classList.remove("is-spinning");
+      refreshBtn.disabled = false;
+    }
   }
 }
 
-async function appealHourClaim(claimId) {
-  const reason = window.prompt("Nhập lý do khiếu nại kết quả xác minh giờ:");
-  if (reason === null) return;
-  if (!reason.trim()) { showToast("Vui lòng nhập lý do khiếu nại.", "warning"); return; }
+function appealHourClaim(claimId) {
+  const idInput = document.getElementById("hourAppealClaimId");
+  const reasonInput = document.getElementById("hourAppealReasonInput");
+  if (idInput) idInput.value = String(claimId);
+  if (reasonInput) reasonInput.value = "";
+  openModal("hourAppealModal");
+}
+
+async function submitHourClaimAppeal() {
+  const claimId = Number(document.getElementById("hourAppealClaimId")?.value);
+  const reason = (document.getElementById("hourAppealReasonInput")?.value || "").trim();
+  const btn = document.getElementById("confirmHourAppealBtn");
+  if (!claimId || !reason) {
+    showToast("Vui lòng nhập lý do khiếu nại.", "warning");
+    document.getElementById("hourAppealReasonInput")?.focus();
+    return;
+  }
+  if (btn) btn.disabled = true;
   try {
-    await api.post(`/hour-claims/${claimId}/appeals`, { appeal_reason: reason.trim() });
+    await api.post(`/hour-claims/${claimId}/appeals`, { appeal_reason: reason });
+    closeModal("hourAppealModal");
     showToast("Đã gửi khiếu nại đến quản trị viên.", "success");
     await loadHourClaims();
   } catch (error) {
     showToast(extractApiError(error, "Không thể gửi khiếu nại."), "error");
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
 function openClaimModal() {
-  document.getElementById("claimModal")?.classList.add("open");
-}
-
-function closeModal(modalId) {
-  document.getElementById(modalId)?.classList.remove("open");
+  openModal("claimModal");
 }
 
 async function submitHourClaim() {
@@ -850,9 +978,9 @@ async function loadProfile() {
       setupUserHeader();
     }
 
-    const statHoursEl = document.getElementById("statTotalHours");
-    if (statHoursEl && p.total_hours != null && Number(p.total_hours) > 0) {
-      statHoursEl.textContent = Number(p.total_hours).toFixed(1);
+    if (p.total_hours != null && Number.isFinite(Number(p.total_hours))) {
+      profileTotalHours = Number(p.total_hours);
+      updateTotalHoursStat();
     }
   } catch {
     const emailEl = document.getElementById("profEmail");
@@ -868,6 +996,10 @@ async function saveUserProfile() {
 
   if (!fullName) {
     showToast("Vui lòng nhập họ và tên.", "warning");
+    return;
+  }
+  if (phone && !/^0\d{9,10}$/.test(phone)) {
+    showToast("Số điện thoại phải gồm 10–11 chữ số và bắt đầu bằng số 0.", "warning");
     return;
   }
 
@@ -1038,10 +1170,58 @@ async function loadMyAttendanceAppeals() {
   try {
     const response = await api.get("/attendance-appeals/me");
     const rows = Array.isArray(response.data) ? response.data : [];
-    panel.innerHTML = rows.length ? `<strong>Khiếu nại điểm danh đã gửi</strong><ul>${rows.map(a =>
-      `<li>Đơn #${Number(a.registration_id)} — ${escapeHtml(a.status)}${a.review_note ? ` — ${escapeHtml(a.review_note)}` : ""}</li>`
-    ).join("")}</ul>` : "Chưa có khiếu nại điểm danh.";
+    const statusMap = {
+      PENDING: { label: "Chờ Organizer", cls: "status-pending" },
+      ACCEPTED: { label: "Organizer chấp nhận", cls: "status-approved" },
+      REJECTED: { label: "Organizer từ chối", cls: "status-rejected" },
+      ADMIN_PENDING: { label: "Chờ Admin xử lý", cls: "status-pending" },
+      ADMIN_ACCEPTED: { label: "Admin chấp nhận", cls: "status-approved" },
+      ADMIN_REJECTED: { label: "Admin từ chối", cls: "status-rejected" },
+    };
+    if (!rows.length) {
+      panel.innerHTML = `<div class="vl-appeal-meta">Chưa có khiếu nại điểm danh nào.</div>`;
+      return;
+    }
+    panel.innerHTML = `
+      <div style="font-weight: 700; margin-bottom: 10px; color: var(--text-main);">Khiếu nại điểm danh đã gửi (${rows.length})</div>
+      <div class="vl-appeal-list">
+        ${rows.map((a) => {
+          const st = statusMap[a.status] || { label: a.status, cls: "status-closed" };
+          return `
+            <div class="vl-appeal-item">
+              <div class="vl-appeal-head">
+                <strong>Đơn #${Number(a.registration_id)}</strong>
+                <span class="status-pill ${st.cls}">${escapeHtml(st.label)}</span>
+              </div>
+              ${a.reason ? `<div class="vl-appeal-reason">${escapeHtml(a.reason)}</div>` : ""}
+              ${a.review_note ? `<div class="vl-appeal-meta">Phản hồi Organizer: ${escapeHtml(a.review_note)}</div>` : ""}
+              ${a.escalation_reason ? `<div class="vl-appeal-meta">Lý do lên Admin: ${escapeHtml(a.escalation_reason)}</div>` : ""}
+              ${a.admin_note ? `<div class="vl-appeal-meta">Phản hồi Admin: ${escapeHtml(a.admin_note)}</div>` : ""}
+              ${a.status === "REJECTED" ? `<div style="margin-top:8px;"><button type="button" class="btn-action btn-action-primary" onclick="escalateAttendanceAppeal(${Number(a.id)})">Khiếu nại lên Admin</button></div>` : ""}
+            </div>
+          `;
+        }).join("")}
+      </div>
+    `;
   } catch (error) {
     panel.textContent = extractApiError(error, "Không tải được khiếu nại điểm danh.");
+  }
+}
+
+async function escalateAttendanceAppeal(appealId) {
+  const reason = window.prompt("Nhập lý do khiếu nại lên Quản trị viên (tối thiểu 10 ký tự):");
+  if (reason === null) return;
+  const trimmed = reason.trim();
+  if (trimmed.length < 10) {
+    showToast("Lý do khiếu nại lên Admin phải có ít nhất 10 ký tự.", "warning");
+    return;
+  }
+  try {
+    await api.post(`/attendance-appeals/${appealId}/escalate`, { escalation_reason: trimmed });
+    showToast("Đã chuyển khiếu nại lên Quản trị viên.", "success");
+    await loadMyAttendanceAppeals();
+    if (typeof NotificationsUI !== "undefined") NotificationsUI.refresh();
+  } catch (error) {
+    showToast(extractApiError(error, "Không thể gửi khiếu nại lên Admin."), "error");
   }
 }
